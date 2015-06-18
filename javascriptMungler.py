@@ -30,27 +30,39 @@ def etsi_var_muuttujat(rivi):
 			palautus = m.group('muuttujanimi')
 	return palautus
 
-def etsi_muuttujat_kaytossa(rivi):
-	a = re.compile(r"""	# sulkeiden sisällä
-						# var-määritteessä
-						# objektin ominaisuutena - Tätä ei ehkä tarvitse toteuttaa
+def etsi_muuttujat(teksti):
+	a = re.compile(r"""
+					(?!
+					(///*(?P<kommentti>.*)/*//) |								# ei monirivisissa kommenteissa
+					(////(?P<kommentti_yksirivinen>.*)$) |		 				# ei kommenteissa
+					("(?P<merkkijono>[^"]*)") |									# ei merkkijonoissa 
+					('(?P<merkkijono2>[^']*)') |								# ei merkkijonoissa 
+					([$(.*)]|[Math]|[_]|[console]([.](?P<kirjastokutsu>\w+))+) 	# ei tiettyjen kirjastojen muuttujina
+					)
+					\b(?P<muuttuja>[a-zA-Z]\w+)\b								# sulkeiden sisällä
+					""", re.X)
+																							# var-määritteessä
+#					\(?ms\{.*(?<muuttuja>\w)\s*:.+})  					# objektin ominaisuutena - Tätä ei ehkä tarvitse toteuttaa
+#					\(?ms\{.*:[\b^"](?<muuttuja>\w)[\b^"].*}) 			# objektin ominaisuuden arvona
 						# osana laskutoimitusta
 						# osana parametrilistausta ( )
 						# osana objektin arvomäärittelyä {tätäEiMuuteta: muuttuja}
-					""", re.X)
-	a.match(rivi)
+
+#	a.match(rivi)
+	a.sub(kasittely_temp, teksti.read())
+
+def kasittely_temp(match):
+	print match.group('kommentti')
 	
-def korvaa_rivin_muuttujat(rivi):
-	muuttuja_exp = r'\b(?P<muuttuja>\w+)\b'
-	rivi = re.sub(muuttuja_exp, muuttujanimi_nimikekartasta, rivi)
-	return rivi
- 
+
 def muuttujanimi_nimikekartasta(re_match):
 	etsittava = re_match.group('muuttuja')
-	if etsittava in nimikekartta:
-		palautus = nimikekartta[re_match.group('muuttuja')]
+	if etsittava in NIMIKEKARTTA:
+		palautus = NIMIKEKARTTA[re_match.group('muuttuja')]
+
 	else:
 		palautus = etsittava
+
 	return palautus
 		
 	
@@ -92,16 +104,21 @@ def lukujarjestelmasta_toiseen(kymmenkantainen_luku, lukujarjestelman_merkit):
 		palautus += lukujarjestelman_merkit[numeraali]
 	return palautus
 
-def korvaa_esiintymat_legacy(teksti, korvaukset):
-    for i, j in korvaukset.iteritems():
-        teksti = teksti.replace(i, j)
-    return teksti
-
-def korvaa_esiintymat(teksti):
-	print korvaa_rivin_muuttujat(teksti)
+def korvaa_esiintymat(rivi):
+	muuttuja_exp = r'\b(?P<muuttuja>[a-zA-Z]\w+)\b'
+	rivi = re.sub(muuttuja_exp, muuttujanimi_nimikekartasta, rivi)
+	return rivi
  
-
-VARATUT = [	#Backbone
+VARATUT = [	
+	#common usage
+	"arguments", "null", "NULL", "true", "false"
+	#string functions
+	"trim", 
+	#array functions
+	
+	#ECMAScript 6
+	"break", "case", "class", "catch", "const", "continue", "debugger", "default", "delete", "do", "else", "export", "extends", "finally", "for", "function", "if", "import", "in", "instanceof", "let", "new", "return", "super", "switch", "this", "throw", "try", "typeof", "var", "void", "while", "with", "yield",
+	#Backbone
 	"events", "Events", "render", "on", "off", "trigger", "once", "listenTo", "stopListening", "listenToOnce", 
 	"Model", "extend", "constructor", "initialize", "get", "set", "escape", "has", "unset", "clear", "id", "idAttribute", "cid", "attributes", "changed", "defaults", "toJSON", "sync", "fetch", "save", "destroy", "Underscore Methods (9)", "validate", "validationError", "isValid", "url", "urlRoot", "parse", "clone", "isNew", "hasChanged", "changedAttributes", "previous", "previousAttributes",
 	"Collection", "extend", "model", "modelId", "constructor / initialize", "models", "toJSON", "sync", "add", "remove", "reset", "set", "get", "at", "push", "pop", "unshift", "shift", "slice", "length", "comparator", "sort", "pluck", "where", "findWhere", "url", "parse", "clone", "fetch", "create",
@@ -124,12 +141,31 @@ VARATUT = [	#Backbone
 #	-otetaan sotkettava tiedosto komentoriviltä argumenttina. 
 #	-haetaan sen muuttujien määritellyt nimet. 
 #	-luodaan niille hakemisto, joissa uudet nimet.
-tiedostonimi = sys.argv[1] # komentoriviltä
-if os.path.isfile(tiedostonimi):
-	tekstitiedosto = open(tiedostonimi, 'r')
-	muuttujat = etsi_muuttujat_maarittelyssa(tekstitiedosto)
-	nimikekartta = muodosta_uusi_nimikekartta(muuttujat, VARATUT)
-	tekstitiedosto = open(tiedostonimi, 'rw')
-	print korvaa_esiintymat(tekstitiedosto.read())
-#	print korvaa_esiintymat_legacy(tekstitiedosto.read(), nimikekartta)
+
+NIMIKEKARTTA = {}
+def suoritus(): 
+
+	tiedostonimi = sys.argv[1] # komentoriviltä
+	tiedostot = sys.argv[1:]
+	muuttujat = []
+	
+	for tiedostonimi in tiedostot:
+		if os.path.isfile(tiedostonimi):
+			tekstitiedosto = open(tiedostonimi, 'r')
+			muuttujat += etsi_muuttujat_maarittelyssa(tekstitiedosto)
+
+	NIMIKEKARTTA.update(muodosta_uusi_nimikekartta(muuttujat, VARATUT))
+
+	for tiedostonimi in tiedostot:
+		if os.path.isfile(tiedostonimi):
+			vientitiedosto = open("munglattu-"+tiedostonimi, 'w+')
+			tekstitiedosto = open(tiedostonimi, 'r')
+			sisalto = korvaa_esiintymat(tekstitiedosto.read())
+			tekstitiedosto.close()
+			vientitiedosto.write(sisalto)
+			vientitiedosto.close()
+
+#etsi_muuttujat(open(sys.argv[1], 'r'))
+
+suoritus()
 	
