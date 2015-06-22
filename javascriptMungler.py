@@ -30,17 +30,36 @@ def etsi_var_muuttujat(rivi):
 			palautus = m.group('muuttujanimi')
 	return palautus
 
+def etsi_kommentit(teksti):
+	a = re.compile(r"""
+					(?P<monirivinenkommentti>(\/\* .*? \*\/) |
+					(\/\/.*?$))
+					""", re.X|re.M|re.S)
+	a.sub(kasittely_temp, teksti)
+	
+def etsi_merkkijonot(teksti):
+	a = re.compile(r"""
+		((?P<merkkijononalkumerkki>["'])(?P<merkkijono>.*?)(?P=merkkijononalkumerkki))
+#		("(?P<merkkijono>[^"]*?)") 
+		#|									# ei merkkijonoissa 
+#		('(?P<merkkijono2>[^']*?)') |								# ei merkkijonoissa 	
+		""", re.X|re.M|re.S)
+	a.sub(kasittely_temp, teksti)
+
+def etsi_kirjastokutsu(teksti):
+	a = re.compile(r"""
+		(?P<kirjastokutsu>((\$\(.*?\))|(Backbone)|(Math)|(_)|(console))([.]\w*)*) |	# Kirjastokutsut ovat pidetään sellaisinaan			
+		""", re.X|re.M|re.S)
+	a.sub(kasittely_temp, teksti)
+		
 def etsi_muuttujat(teksti):
 	a = re.compile(r"""
-					(?!
-					(///*(?P<kommentti>.*)/*//) |								# ei monirivisissa kommenteissa
-					(////(?P<kommentti_yksirivinen>.*)$) |		 				# ei kommenteissa
-					("(?P<merkkijono>[^"]*)") |									# ei merkkijonoissa 
-					('(?P<merkkijono2>[^']*)') |								# ei merkkijonoissa 
-					([$(.*)]|[Math]|[_]|[console]([.](?P<kirjastokutsu>\w+))+) 	# ei tiettyjen kirjastojen muuttujina
-					)
-					\b(?P<muuttuja>[a-zA-Z]\w+)\b								# sulkeiden sisällä
-					""", re.X)
+					(?P<kommentti>(\/\* .*? \*\/) 												# Moniriviset ja yksiriviset kommentit menevät samaan
+					(\/\/.*?$))	|	 															# Moniriviset ja yksiriviset kommentit menevät samaan
+					(?P<monirivinenkommentti>(\/\* .*? \*\/) |									# Merkkijonot (greedy: ei erottele sisättäisiä merkkijonoja
+					(?P<kirjastokutsu>((\$\(.*?\))|(Backbone)|(Math)|(_)|(console))([.]\w*)*) |	# Kirjastokutsut ovat pidetään sellaisinaan
+					\b(?P<muuttuja>[a-zA-Z]\w+)\b												# Loput ilmaisut ovat muuttujia. 
+					""", re.X|re.M)
 																							# var-määritteessä
 #					\(?ms\{.*(?<muuttuja>\w)\s*:.+})  					# objektin ominaisuutena - Tätä ei ehkä tarvitse toteuttaa
 #					\(?ms\{.*:[\b^"](?<muuttuja>\w)[\b^"].*}) 			# objektin ominaisuuden arvona
@@ -49,11 +68,30 @@ def etsi_muuttujat(teksti):
 						# osana objektin arvomäärittelyä {tätäEiMuuteta: muuttuja}
 
 #	a.match(rivi)
-	a.sub(kasittely_temp, teksti.read())
+	a.sub(kasittely_temp, teksti)
 
 def kasittely_temp(match):
-	print match.group('kommentti')
-	
+	if match.group('kirjastokutsu'):
+		print match.group('kirjastokutsu')
+
+# Merkkijonokorvauksien toteuttaminen:
+def kasittely_re_korvaukselle(match):
+	if match.group('kommentti'):
+		return kasittely_kommenteille(match)
+	if match.group('merkkijono'):
+		return kasittely_merkkijonoille(match)
+	if match.group('kirjastokutsu'):
+		return kasittely_kirjastokutsuille(match)
+		
+def kasittely_kommenteille(match):
+	return ""
+
+def kasittely_merkkijonoille(match):
+	return match.group('merkkijono')
+
+def kasittely_kirjastokutsuille(match):
+	return match.group('kirjastokutsu')
+
 
 def muuttujanimi_nimikekartasta(re_match):
 	etsittava = re_match.group('muuttuja')
@@ -152,7 +190,8 @@ def suoritus():
 	for tiedostonimi in tiedostot:
 		if os.path.isfile(tiedostonimi):
 			tekstitiedosto = open(tiedostonimi, 'r')
-			muuttujat += etsi_muuttujat_maarittelyssa(tekstitiedosto)
+			print etsi_kirjastokutsu(tekstitiedosto.read())
+			#muuttujat += etsi_muuttujat_maarittelyssa(tekstitiedosto)
 
 	NIMIKEKARTTA.update(muodosta_uusi_nimikekartta(muuttujat, VARATUT))
 
