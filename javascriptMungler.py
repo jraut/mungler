@@ -48,18 +48,19 @@ def etsi_merkkijonot(teksti):
 
 def etsi_kirjastokutsu(teksti):
 	a = re.compile(r"""
-		(?P<kirjastokutsu>((\$\(.*?\))|(Backbone)|(Math)|(_)|(console))([.]\w*)*) |	# Kirjastokutsut ovat pidetään sellaisinaan			
+		(?P<kirjastokutsu>((\$\( .*?\))|(Backbone)|(Math)|(_)|(console))([.]\w*)*) |	# Kirjastokutsut ovat pidetään sellaisinaan			
 		""", re.X|re.M|re.S)
 	a.sub(kasittely_temp, teksti)
 		
 def etsi_muuttujat(teksti):
 	a = re.compile(r"""
-					(?P<kommentti>(\/\* .*? \*\/) 												# Moniriviset ja yksiriviset kommentit menevät samaan
-					(\/\/.*?$))	|	 															# Moniriviset ja yksiriviset kommentit menevät samaan
-					(?P<monirivinenkommentti>(\/\* .*? \*\/) |									# Merkkijonot (greedy: ei erottele sisättäisiä merkkijonoja
-					(?P<kirjastokutsu>((\$\(.*?\))|(Backbone)|(Math)|(_)|(console))([.]\w*)*) |	# Kirjastokutsut ovat pidetään sellaisinaan
-					\b(?P<muuttuja>[a-zA-Z]\w+)\b												# Loput ilmaisut ovat muuttujia. 
-					""", re.X|re.M)
+					(?P<kommentti>(\/\* .*? \*\/) |													# Moniriviset ja yksiriviset kommentit menevät samaan
+					(\/\/.*?$))	|	 																# Moniriviset ja yksiriviset kommentit menevät samaan
+					(?P<merkkijono>((?P<merkkijononalkumerkki>["']).*?(?P=merkkijononalkumerkki))) |# Merkkijonot (greedy: ei erottele sisättäisiä merkkijonoja
+				#	((\$\(\bfunction\s*\(.*\){\b (?P<muuttuja>[a-zA-Z]\w*) \b \} \)					# Muuttuja voi piileskellä kirjastokutsun sisällä.
+					(?P<kirjastokutsu>((\$\(.*?\))|(Backbone)|(Math)|(_)|(console))([.]\w*)*) |		# Kirjastokutsujen metodit ovat sellaisinaan
+					\b(?P<muuttuja>[a-zA-Z]\w*)\b													# Loput ilmaisut ovat muuttujia. Eivät ala kuin kirjaimella.
+					""", re.X|re.M|re.S)
 																							# var-määritteessä
 #					\(?ms\{.*(?<muuttuja>\w)\s*:.+})  					# objektin ominaisuutena - Tätä ei ehkä tarvitse toteuttaa
 #					\(?ms\{.*:[\b^"](?<muuttuja>\w)[\b^"].*}) 			# objektin ominaisuuden arvona
@@ -68,21 +69,45 @@ def etsi_muuttujat(teksti):
 						# osana objektin arvomäärittelyä {tätäEiMuuteta: muuttuja}
 
 #	a.match(rivi)
-	a.sub(kasittely_temp, teksti)
+	return a.sub(kasittely_re_korvaukselle, teksti)
 
 def kasittely_temp(match):
-	if match.group('kirjastokutsu'):
-		print match.group('kirjastokutsu')
+	tulos = match.groups();
+	if tulos[0]:
+
+		if 'muuttuja' in match.groups():
+			print match.group('muuttuja')
 
 # Merkkijonokorvauksien toteuttaminen:
 def kasittely_re_korvaukselle(match):
-	if match.group('kommentti'):
-		return kasittely_kommenteille(match)
-	if match.group('merkkijono'):
-		return kasittely_merkkijonoille(match)
-	if match.group('kirjastokutsu'):
+	re_osumat = match.groupdict();
+	if re_osumat['kommentti']:
+		return ""
+	if re_osumat['merkkijono']:
+		return re_osumat['merkkijono']#return kasittely_merkkijonoille(match)
+	if re_osumat['kirjastokutsu']:
+		return re_osumat['kirjastokutsu']
 		return kasittely_kirjastokutsuille(match)
-		
+	if re_osumat['muuttuja']:
+		return kasittely_muuttujille(match)	
+	return "";
+	
+#	korvattavat_ryhmat = ['muuttuja', 'kommentti', 'merkkijono', 'kirjastokutsu']
+#		for ryhma in korvattavat_ryhmat:
+#			if ryhma in match.groups():
+#				return match.group(ryhma)
+
+def kasittely_muuttujille(match):
+	etsittava = match.group('muuttuja')
+	if etsittava in VARATUT:
+		return etsittava
+	if etsittava not in NIMIKEKARTTA:
+		monesko = len(NIMIKEKARTTA)								# Monesko oma lisättävä nimikekarttaan tulee.
+		nimike = lukujarjestelmasta_toiseen(monesko, MERKIT)	# Haetaan uusi nimike 
+		NIMIKEKARTTA[etsittava] = nimike						# Tallennetaan uusi nimike 
+	return NIMIKEKARTTA[match.group('muuttuja')]
+	
+	
 def kasittely_kommenteille(match):
 	return ""
 
@@ -97,7 +122,6 @@ def muuttujanimi_nimikekartasta(re_match):
 	etsittava = re_match.group('muuttuja')
 	if etsittava in NIMIKEKARTTA:
 		palautus = NIMIKEKARTTA[re_match.group('muuttuja')]
-
 	else:
 		palautus = etsittava
 
@@ -190,7 +214,7 @@ def suoritus():
 	for tiedostonimi in tiedostot:
 		if os.path.isfile(tiedostonimi):
 			tekstitiedosto = open(tiedostonimi, 'r')
-			print etsi_kirjastokutsu(tekstitiedosto.read())
+			etsi_muuttujat(tekstitiedosto.read())
 			#muuttujat += etsi_muuttujat_maarittelyssa(tekstitiedosto)
 
 	NIMIKEKARTTA.update(muodosta_uusi_nimikekartta(muuttujat, VARATUT))
@@ -199,7 +223,7 @@ def suoritus():
 		if os.path.isfile(tiedostonimi):
 			vientitiedosto = open("munglattu-"+tiedostonimi, 'w+')
 			tekstitiedosto = open(tiedostonimi, 'r')
-			sisalto = korvaa_esiintymat(tekstitiedosto.read())
+			sisalto = etsi_muuttujat(tekstitiedosto.read())
 			tekstitiedosto.close()
 			vientitiedosto.write(sisalto)
 			vientitiedosto.close()
