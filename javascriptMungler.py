@@ -1,6 +1,98 @@
 # -*- coding: utf-8 -*-
 import re, os, sys
+	
+def etsi_muuttujat(teksti):
+	a = re.compile(r"""
+					(?P<kommentti>(\/\* .*? \*\/) | (\/\/.*?$))	|											# Moniriviset ja yksiriviset kommentit.
+#					((\.(on|off|trigger|once|listenTo|stopListening|listenToOnce)\() | (events:))  \s* \{	# Merkkijonot voivat sisältää muuttujan: backbone.js: event-funktiokutsussa map-muodossa.
+#					 .*?:\s*['"](?P<muuttuja>[a-zA-Z]\w*)['"].*?\})  |										# Jatkoa edelliseen...                   backbone.js: osana konstruktorin event-mappia.					
+#					(\.(on|off|trigger|once|listenTo|stopListening|listenToOnce)\(\s*						# Merkkijonot voivat sisältää muuttujan: backbone.js: -kutsussa merkkijonomuodossa.
+#					['"]\b(?P<muuttuja3>[a-zA-Z]\w*)\b['"],.*?) |											# Jatkoa edelliseen...  					
+					(?P<merkkijono>((?P<merkkijononalkumerkki>["']).*?(?P=merkkijononalkumerkki))) |		# Merkkijonot eivät normaalisti sisällä. (greedy: ei erottele sisättäisiä merkkijonoja
+					(?P<kirjastokutsu>((\$\(.*?\))|(Backbone)|(Math)|(_)|(console))([.]\w*)*) |				# Kirjastokutsujen metodit ovat sellaisinaan
+					\b(?P<muuttuja>[a-zA-Z]\w*)\b 															# Loput ilmaisut ovat muuttujia. Eivät ala kuin kirjaimella.
+																
+					""", re.X|re.M|re.S)
+																							# var-määritteessä
+#					\(?ms\{.*(?<muuttuja>\w)\s*:.+})  					# objektin ominaisuutena - Tätä ei ehkä tarvitse toteuttaa
+#					\(?ms\{.*:[\b^"](?<muuttuja>\w)[\b^"].*}) 			# objektin ominaisuuden arvona
+						# osana laskutoimitusta
+						# osana parametrilistausta ( )
+						# osana objektin arvomäärittelyä {tätäEiMuuteta: muuttuja}
 
+#	a.match(rivi)
+	return a.sub(kasittely_re_korvaukselle, teksti)
+
+# Merkkijonokorvauksien toteuttaminen:
+def kasittely_re_korvaukselle(match):
+	re_osumat = match.groupdict();
+#	if re_osumat['muuttuja3']:
+#		print re_osumat['muuttuja3']
+	if re_osumat['kommentti']:
+		return ""
+	if re_osumat['merkkijono']:
+		return re_osumat['merkkijono']#return kasittely_merkkijonoille(match)
+	if re_osumat['kirjastokutsu']:
+		return re_osumat['kirjastokutsu']
+		return kasittely_kirjastokutsuille(match)
+	if re_osumat['muuttuja']:
+		return kasittely_muuttujille(match)	
+	return "";
+	
+#	korvattavat_ryhmat = ['muuttuja', 'kommentti', 'merkkijono', 'kirjastokutsu']
+#		for ryhma in korvattavat_ryhmat:
+#			if ryhma in match.groups():
+#				return match.group(ryhma)
+
+def kasittely_muuttujille(match):
+	etsittava = match.group('muuttuja')
+	if etsittava in VARATUT:
+		return etsittava
+	if etsittava not in NIMIKEKARTTA:
+		monesko = len(NIMIKEKARTTA)								# Monesko oma lisättävä nimikekarttaan tulee.
+		nimike = lukujarjestelmasta_toiseen(monesko, MERKIT)	# Haetaan uusi nimike 
+		NIMIKEKARTTA[etsittava] = nimike						# Tallennetaan uusi nimike 
+	return NIMIKEKARTTA[match.group('muuttuja')]
+	
+	
+def kasittely_kommenteille(match):
+	return ""
+
+def kasittely_merkkijonoille(match):
+	return match.group('merkkijono')
+
+def kasittely_kirjastokutsuille(match):
+	return match.group('kirjastokutsu')
+		
+	
+# Aakkoset a-z.
+MERKIT = [chr(i) for i in range(ord('a'), ord('z')+1)]	
+
+# Ottaa vastaan listan jossa merkkijonoja ja palauttaa avain-arvo -pareina saman listan.
+#	Listan avaimet luodaan järjestyksessä merkeistä a-z: a, b, c, d, ... , aa, ab, ac, ad, ... , ba, bb, bc, ...
+#	Todo! Ottaa vastaan re.matcheja jotta tieto paikoista säilyisi. Ei välttämättä tarpeellinen ominaisuus.
+
+def lukujarjestelmasta_toiseen(kymmenkantainen_luku, lukujarjestelman_merkit):
+	palautus = ""
+	merkkien_maara = 1
+	lukujarjestelman_kantaisuus = len(lukujarjestelman_merkit)
+	valisumma = lukujarjestelman_kantaisuus
+	while valisumma < kymmenkantainen_luku:
+		merkkien_maara += 1
+		valisumma = (lukujarjestelman_kantaisuus ** merkkien_maara)
+	valisumma = kymmenkantainen_luku
+	eksponentit = range(0, merkkien_maara)
+	eksponentit.reverse();
+	for i in eksponentit:
+		resoluutio = lukujarjestelman_kantaisuus ** i;
+		numeraali = 0
+		while (valisumma > resoluutio):
+			valisumma -= resoluutio 
+			numeraali += 1		
+		palautus += lukujarjestelman_merkit[numeraali]
+	return palautus
+
+#TURHAA:
 def etsi_muuttujat_maarittelyssa(tiedosto):
 	palautus = []
 	with tiedosto as t:
@@ -51,25 +143,6 @@ def etsi_kirjastokutsu(teksti):
 		(?P<kirjastokutsu>((\$\( .*?\))|(Backbone)|(Math)|(_)|(console))([.]\w*)*) |	# Kirjastokutsut ovat pidetään sellaisinaan			
 		""", re.X|re.M|re.S)
 	a.sub(kasittely_temp, teksti)
-		
-def etsi_muuttujat(teksti):
-	a = re.compile(r"""
-					(?P<kommentti>(\/\* .*? \*\/) |													# Moniriviset ja yksiriviset kommentit menevät samaan
-					(\/\/.*?$))	|	 																# Moniriviset ja yksiriviset kommentit menevät samaan
-					(?P<merkkijono>((?P<merkkijononalkumerkki>["']).*?(?P=merkkijononalkumerkki))) |# Merkkijonot (greedy: ei erottele sisättäisiä merkkijonoja
-				#	((\$\(\bfunction\s*\(.*\){\b (?P<muuttuja>[a-zA-Z]\w*) \b \} \)					# Muuttuja voi piileskellä kirjastokutsun sisällä.
-					(?P<kirjastokutsu>((\$\(.*?\))|(Backbone)|(Math)|(_)|(console))([.]\w*)*) |		# Kirjastokutsujen metodit ovat sellaisinaan
-					\b(?P<muuttuja>[a-zA-Z]\w*)\b													# Loput ilmaisut ovat muuttujia. Eivät ala kuin kirjaimella.
-					""", re.X|re.M|re.S)
-																							# var-määritteessä
-#					\(?ms\{.*(?<muuttuja>\w)\s*:.+})  					# objektin ominaisuutena - Tätä ei ehkä tarvitse toteuttaa
-#					\(?ms\{.*:[\b^"](?<muuttuja>\w)[\b^"].*}) 			# objektin ominaisuuden arvona
-						# osana laskutoimitusta
-						# osana parametrilistausta ( )
-						# osana objektin arvomäärittelyä {tätäEiMuuteta: muuttuja}
-
-#	a.match(rivi)
-	return a.sub(kasittely_re_korvaukselle, teksti)
 
 def kasittely_temp(match):
 	tulos = match.groups();
@@ -77,45 +150,6 @@ def kasittely_temp(match):
 
 		if 'muuttuja' in match.groups():
 			print match.group('muuttuja')
-
-# Merkkijonokorvauksien toteuttaminen:
-def kasittely_re_korvaukselle(match):
-	re_osumat = match.groupdict();
-	if re_osumat['kommentti']:
-		return ""
-	if re_osumat['merkkijono']:
-		return re_osumat['merkkijono']#return kasittely_merkkijonoille(match)
-	if re_osumat['kirjastokutsu']:
-		return re_osumat['kirjastokutsu']
-		return kasittely_kirjastokutsuille(match)
-	if re_osumat['muuttuja']:
-		return kasittely_muuttujille(match)	
-	return "";
-	
-#	korvattavat_ryhmat = ['muuttuja', 'kommentti', 'merkkijono', 'kirjastokutsu']
-#		for ryhma in korvattavat_ryhmat:
-#			if ryhma in match.groups():
-#				return match.group(ryhma)
-
-def kasittely_muuttujille(match):
-	etsittava = match.group('muuttuja')
-	if etsittava in VARATUT:
-		return etsittava
-	if etsittava not in NIMIKEKARTTA:
-		monesko = len(NIMIKEKARTTA)								# Monesko oma lisättävä nimikekarttaan tulee.
-		nimike = lukujarjestelmasta_toiseen(monesko, MERKIT)	# Haetaan uusi nimike 
-		NIMIKEKARTTA[etsittava] = nimike						# Tallennetaan uusi nimike 
-	return NIMIKEKARTTA[match.group('muuttuja')]
-	
-	
-def kasittely_kommenteille(match):
-	return ""
-
-def kasittely_merkkijonoille(match):
-	return match.group('merkkijono')
-
-def kasittely_kirjastokutsuille(match):
-	return match.group('kirjastokutsu')
 
 
 def muuttujanimi_nimikekartasta(re_match):
@@ -126,14 +160,13 @@ def muuttujanimi_nimikekartasta(re_match):
 		palautus = etsittava
 
 	return palautus
-		
-	
-# Aakkoset a-z.
-MERKIT = [chr(i) for i in range(ord('a'), ord('z')+1)]	
 
-# Ottaa vastaan listan jossa merkkijonoja ja palauttaa avain-arvo -pareina saman listan.
-#	Listan avaimet luodaan järjestyksessä merkeistä a-z: a, b, c, d, ... , aa, ab, ac, ad, ... , ba, bb, bc, ...
-#	Todo! Ottaa vastaan re.matcheja jotta tieto paikoista säilyisi. Ei välttämättä tarpeellinen ominaisuus.
+
+def korvaa_esiintymat(rivi):
+	muuttuja_exp = r'\b(?P<muuttuja>[a-zA-Z]\w+)\b'
+	rivi = re.sub(muuttuja_exp, muuttujanimi_nimikekartasta, rivi)
+	return rivi
+
 def muodosta_uusi_nimikekartta(muuttujanimikkeet, varatut):
 	nimike = ""
 	monesko = 0
@@ -146,31 +179,7 @@ def muodosta_uusi_nimikekartta(muuttujanimikkeet, varatut):
 		palautus[i] = i
 	return palautus
 
-def lukujarjestelmasta_toiseen(kymmenkantainen_luku, lukujarjestelman_merkit):
-	palautus = ""
-	merkkien_maara = 1
-	lukujarjestelman_kantaisuus = len(lukujarjestelman_merkit)
-	valisumma = lukujarjestelman_kantaisuus
-	while valisumma < kymmenkantainen_luku:
-		merkkien_maara += 1
-		valisumma = (lukujarjestelman_kantaisuus ** merkkien_maara)
-	valisumma = kymmenkantainen_luku
-	eksponentit = range(0, merkkien_maara)
-	eksponentit.reverse();
-	for i in eksponentit:
-		resoluutio = lukujarjestelman_kantaisuus ** i;
-		numeraali = 0
-		while (valisumma > resoluutio):
-			valisumma -= resoluutio 
-			numeraali += 1		
-		palautus += lukujarjestelman_merkit[numeraali]
-	return palautus
 
-def korvaa_esiintymat(rivi):
-	muuttuja_exp = r'\b(?P<muuttuja>[a-zA-Z]\w+)\b'
-	rivi = re.sub(muuttuja_exp, muuttujanimi_nimikekartasta, rivi)
-	return rivi
- 
 VARATUT = [	
 	#common usage
 	"arguments", "null", "NULL", "true", "false"
