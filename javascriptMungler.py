@@ -92,94 +92,6 @@ def lukujarjestelmasta_toiseen(kymmenkantainen_luku, lukujarjestelman_merkit):
 		palautus += lukujarjestelman_merkit[numeraali]
 	return palautus
 
-#TURHAA:
-def etsi_muuttujat_maarittelyssa(tiedosto):
-	palautus = []
-	with tiedosto as t:
-		for rivi in t:
-			mnimi = etsi_var_muuttujat(rivi)
-			# järjestetään pituuden mukaan. Näin nimet eivät korvaa toisiaan "osittain".
-			if mnimi: 
-				paikka = 0
-				for i in palautus:			
-					if len(mnimi) > len(i): # Lisättävän paikka löytyi
-						palautus.insert(paikka, mnimi)
-						break
-					paikka += 1
-				else:  # saavutetaan vain jos edellinen rekursio menee loppuun asti
-					paikka = 0
-					palautus.append(mnimi)
-	return palautus
-
-#etsi_muuttujat(text = käsiteltävä tekstikatkelma, rivi koodia)
-# listaa muuttujat jotka on määritelty "var muuttujanNimi = .." muodossa.
-def etsi_var_muuttujat(rivi):
-	muuttuja_exp = '^(?P<sisennys>\s*)var\s*(?P<muuttujanimi>\w*)\s*=' 
-	palautus = ""
-	m = re.match(muuttuja_exp, rivi, re.MULTILINE)
-	if m:
-		if m.group('muuttujanimi'):
-			palautus = m.group('muuttujanimi')
-	return palautus
-
-def etsi_kommentit(teksti):
-	a = re.compile(r"""
-					(?P<monirivinenkommentti>(\/\* .*? \*\/) |
-					(\/\/.*?$))
-					""", re.X|re.M|re.S)
-	a.sub(kasittely_temp, teksti)
-	
-def etsi_merkkijonot(teksti):
-	a = re.compile(r"""
-		((?P<merkkijononalkumerkki>["'])(?P<merkkijono>.*?)(?P=merkkijononalkumerkki))
-#		("(?P<merkkijono>[^"]*?)") 
-		#|									# ei merkkijonoissa 
-#		('(?P<merkkijono2>[^']*?)') |								# ei merkkijonoissa 	
-		""", re.X|re.M|re.S)
-	a.sub(kasittely_temp, teksti)
-
-def etsi_kirjastokutsu(teksti):
-	a = re.compile(r"""
-		(?P<kirjastokutsu>((\$\( .*?\))|(Backbone)|(Math)|(_)|(console))([.]\w*)*) |	# Kirjastokutsut ovat pidetään sellaisinaan			
-		""", re.X|re.M|re.S)
-	a.sub(kasittely_temp, teksti)
-
-def kasittely_temp(match):
-	tulos = match.groups();
-	if tulos[0]:
-
-		if 'muuttuja' in match.groups():
-			print match.group('muuttuja')
-
-
-def muuttujanimi_nimikekartasta(re_match):
-	etsittava = re_match.group('muuttuja')
-	if etsittava in NIMIKEKARTTA:
-		palautus = NIMIKEKARTTA[re_match.group('muuttuja')]
-	else:
-		palautus = etsittava
-
-	return palautus
-
-
-def korvaa_esiintymat(rivi):
-	muuttuja_exp = r'\b(?P<muuttuja>[a-zA-Z]\w+)\b'
-	rivi = re.sub(muuttuja_exp, muuttujanimi_nimikekartasta, rivi)
-	return rivi
-
-def muodosta_uusi_nimikekartta(muuttujanimikkeet, varatut):
-	nimike = ""
-	monesko = 0
-	palautus = {}
-	for mn in muuttujanimikkeet:
-		monesko += 1
-		nimike = lukujarjestelmasta_toiseen(monesko, MERKIT)
-		palautus[mn] = nimike
-	for i in varatut: 
-		palautus[i] = i
-	return palautus
-
-
 VARATUT = [	
 	#common usage
 	"arguments", "null", "NULL", "true", "false"
@@ -190,13 +102,13 @@ VARATUT = [
 	#ECMAScript 6
 	"break", "case", "class", "catch", "const", "continue", "debugger", "default", "delete", "do", "else", "export", "extends", "finally", "for", "function", "if", "import", "in", "instanceof", "let", "new", "return", "super", "switch", "this", "throw", "try", "typeof", "var", "void", "while", "with", "yield",
 	#Backbone
-	"events", "Events", "render", "on", "off", "trigger", "once", "listenTo", "stopListening", "listenToOnce", 
+	"events", "Events", "render", "on", "off", "trigger", "once", "listenTo", "stopListening", "listenToOnce", "add", "remove", "update", "reset", "sort", "change", "destroy", "request", "sync", "error", "invalid", "route", "all",
 	"Model", "extend", "constructor", "initialize", "get", "set", "escape", "has", "unset", "clear", "id", "idAttribute", "cid", "attributes", "changed", "defaults", "toJSON", "sync", "fetch", "save", "destroy", "Underscore Methods (9)", "validate", "validationError", "isValid", "url", "urlRoot", "parse", "clone", "isNew", "hasChanged", "changedAttributes", "previous", "previousAttributes",
 	"Collection", "extend", "model", "modelId", "constructor / initialize", "models", "toJSON", "sync", "add", "remove", "reset", "set", "get", "at", "push", "pop", "unshift", "shift", "slice", "length", "comparator", "sort", "pluck", "where", "findWhere", "url", "parse", "clone", "fetch", "create",
 	"Router", "extend", "routes", "constructor / initialize", "route", "navigate", "execute",
 	"History", "start",
 	"Sync", "Backbone.sync", "Backbone.ajax", "Backbone.emulateHTTP", "Backbone.emulateJSON",
-	"View", "extend", "constructor / initialize", "el", "$el", "setElement", "attributes", "$ (jQuery)", "template", "render", "remove", "delegateEvents", "undelegateEvents",
+	"View", "extend", "constructor / initialize", "el", "$el", "setElement", "attributes", "$ (jQuery)", "template", "render", "remove", "delegateEvents", "undelegateEvents", "tagName", "className", "id", "model", "collection", "el", "id", "$el",
 	#Underscore
 	"Collections", "each", "map", "reduce", "reduceRight", "find", "filter", "where", "findWhere", "reject", "every", "some", "contains", "invoke", "pluck", "max", "min", "sortBy", "groupBy", "indexBy", "countBy", "shuffle", "sample", "toArray", "size", "partition",
 	"Arrays", "first", "initial", "last", "rest", "compact", "flatten", "without", "union", "intersection", "difference", "uniq", "zip", "unzip", "object", "indexOf", "lastIndexOf", "sortedIndex", "findIndex", "findLastIndex", "range",
