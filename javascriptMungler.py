@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 import re, os, sys
 	
-def etsi_muuttujat(teksti):
+def etsi_ja_korvaa_muuttujat(teksti):
 	a = re.compile(r"""
 					(?P<kommentti>(\/\* .*? \*\/) | (\/\/.*?$))	|											# Moniriviset ja yksiriviset kommentit.
-#					((\.(on|off|trigger|once|listenTo|stopListening|listenToOnce)\() | (events:))  \s* \{	# Merkkijonot voivat sisältää muuttujan: backbone.js: event-funktiokutsussa map-muodossa.
-#					 .*?:\s*['"](?P<muuttuja>[a-zA-Z]\w*)['"].*?\})  |										# Jatkoa edelliseen...                   backbone.js: osana konstruktorin event-mappia.					
-#					(\.(on|off|trigger|once|listenTo|stopListening|listenToOnce)\(\s*						# Merkkijonot voivat sisältää muuttujan: backbone.js: -kutsussa merkkijonomuodossa.
-#					['"]\b(?P<muuttuja3>[a-zA-Z]\w*)\b['"],.*?) |											# Jatkoa edelliseen...  					
+# 					.get|.set\(['"](?P<muuttuja>)["']\)														# tietynmuotoiset Backbone-kutsut: get- ja set. get('muuttuja')
+					events:\s*\{(?P<eventmap>.*?)\}			|												# Merkkijonot voivat sisältää muuttujan: backbone.js: osana funktiomäärittelyn events-mappia.	
 					(?P<merkkijono>((?P<merkkijononalkumerkki>["']).*?(?P=merkkijononalkumerkki))) |		# Merkkijonot eivät normaalisti sisällä. (greedy: ei erottele sisättäisiä merkkijonoja
 					(?P<kirjastokutsu>((\$\(.*?\))|(Backbone)|(Math)|(_)|(console))([.]\w*)*) |				# Kirjastokutsujen metodit ovat sellaisinaan
 					\b(?P<muuttuja>[a-zA-Z]\w*)\b 															# Loput ilmaisut ovat muuttujia. Eivät ala kuin kirjaimella.
@@ -23,11 +21,29 @@ def etsi_muuttujat(teksti):
 #	a.match(rivi)
 	return a.sub(kasittely_re_korvaukselle, teksti)
 
+def merkkijonossa(teksti):#'events: {"a": "a1"."aa": "a2"}'
+	a = re.compile(r"""
+
+					(((?:(\.(on|off|trigger|once|listenTo|stopListening|listenToOnce)\()  \s* \{				# Merkkijonot voivat sisältää muuttujan: backbone.js: event-funktiokutsussa map-muodossa.
+					 .*?):\s*['"](?P<muuttuja1>[a-zA-Z]\w*)['"].*?\))  |										# Jatkoa edelliseen...                   backbone.js: event-funktiokutsussa map-muodossa.
+					(\.(on|off|trigger|once|listenTo|stopListening|listenToOnce)\(\.*						# Merkkijonot voivat sisältää muuttujan: backbone.js: -kutsussa merkkijonomuodossa.
+					['"]\b(?P<muuttuja3>[a-zA-Z]\w*)\b['"][,.*?]*\)))										# Jatkoa edelliseen... 
+					""", re.X|re.M|re.S)
+	a.sub(boguskasittely, teksti)
+def boguskasittely(match):
+	osumat = match.groupdict()
+
+	if osumat['muuttuja1']:
+		print osumat['muuttuja1']
+	if osumat['muuttuja2']:
+		print osumat['muuttuja2']
+	if osumat['muuttuja3']:
+		print osumat['muuttuja3']
+#merkkijonossa('events: {"a": "a1"."aa": "a2"}')
+
 # Merkkijonokorvauksien toteuttaminen:
 def kasittely_re_korvaukselle(match):
 	re_osumat = match.groupdict();
-#	if re_osumat['muuttuja3']:
-#		print re_osumat['muuttuja3']
 	if re_osumat['kommentti']:
 		return ""
 	if re_osumat['merkkijono']:
@@ -92,6 +108,20 @@ def lukujarjestelmasta_toiseen(kymmenkantainen_luku, lukujarjestelman_merkit):
 		palautus += lukujarjestelman_merkit[numeraali]
 	return palautus
 
+
+def muodosta_uusi_nimikekartta(muuttujanimikkeet, varatut):
+	nimike = ""
+	monesko = 0
+	palautus = {}
+	for mn in muuttujanimikkeet:
+		monesko += 1
+		nimike = lukujarjestelmasta_toiseen(monesko, MERKIT)
+		palautus[mn] = nimike
+	for i in varatut: 
+		palautus[i] = i
+	return palautus
+
+
 VARATUT = [	
 	#common usage
 	"arguments", "null", "NULL", "true", "false"
@@ -132,11 +162,11 @@ def suoritus():
 	tiedostot = sys.argv[1:]
 	muuttujat = []
 	
-	for tiedostonimi in tiedostot:
-		if os.path.isfile(tiedostonimi):
-			tekstitiedosto = open(tiedostonimi, 'r')
-			etsi_muuttujat(tekstitiedosto.read())
-			#muuttujat += etsi_muuttujat_maarittelyssa(tekstitiedosto)
+#	for tiedostonimi in tiedostot:
+#		if os.path.isfile(tiedostonimi):
+#			tekstitiedosto = open(tiedostonimi, 'r')
+#			etsi_muuttujat(tekstitiedosto.read())
+#			#muuttujat += etsi_muuttujat_maarittelyssa(tekstitiedosto)
 
 	NIMIKEKARTTA.update(muodosta_uusi_nimikekartta(muuttujat, VARATUT))
 
@@ -144,12 +174,13 @@ def suoritus():
 		if os.path.isfile(tiedostonimi):
 			vientitiedosto = open("munglattu-"+tiedostonimi, 'w+')
 			tekstitiedosto = open(tiedostonimi, 'r')
-			sisalto = etsi_muuttujat(tekstitiedosto.read())
+			sisalto = etsi_ja_korvaa_muuttujat(tekstitiedosto.read())
 			tekstitiedosto.close()
 			vientitiedosto.write(sisalto)
 			vientitiedosto.close()
 
 #etsi_muuttujat(open(sys.argv[1], 'r'))
-
 suoritus()
-	
+
+
+
