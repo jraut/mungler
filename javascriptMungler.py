@@ -7,6 +7,10 @@ def onHTML(tiedostonimi):
 def onCSS(tiedostonimi):
 	return tiedostonimi.split(".")[-1].find("css") is not -1
 
+def onPHP(tiedostonimi):
+	return tiedostonimi.split(".")[-1].find("php") is not -1
+
+
 def luoTiedostonimiEtuliitteella(tiedostonimi, etuliite):
 	osat = tiedostonimi.split("/")
 	if len(osat) == 1:
@@ -205,11 +209,12 @@ def muodosta_uusi_nimikekartta(muuttujanimikkeet):
 	return palautus
 
 VARATUT = [	
-
+	#Implementation specific
+	"r", "g", "b", "h", "s", "l", "savyHEX", "koostumus", "oma", "taysi", "paletti", "savyja", "alisavyja",
 	#jQuery effect
 	"effect", "direction", "blind",  "paletti", "savyHEX", 'koostumus', 'taysi', # 'oma', 'savyja', 'alisavyja', 'taysi', 'hex', 'savyHEX', 'rinnakkaisvarit', 'alivarit', 'rinnakkaisuus', 'varijyva', 'varikartta', 'suljeNappiKehys', 'linkki', 'taysiTaytto', 'varinOtsikko', 'settiValitsin', 'settivalitsimet', 'variasetukset', "savyvalitsin", "kyllaisyysvalitsin", "kirkkausvalitsin", "varihex", "varinsaatimet", "varisaatimenPykala", "piilotettu", "vaihda", "eiKaytossa", "linkki",
 	#Randoms: css-property values
-	'cover', 'hover', 'auto', 'inline-block', "scroll", "hidden", "overflow", 'block', 'clientX', 'clientY', "hsl", "rgb", "hsla", "rgba", "ffffff", "af4f4f", "pois",
+	'cover', 'hover', 'auto', 'inline-block', "scroll", "hidden", "overflow", 'block', 'clientX', 'clientY', "hsl", "rgb", "hsla", "rgba", "ffffff", "000000", "c0c0c0", "af4f4f", "pois", "#",
 	#HTML-elements
 	'body', 'html', 'head', 'li', 'ul', 'div', 'p', 'canvas', 'h1', 'h2', 
 	#common usage
@@ -333,7 +338,18 @@ VARATUT = [
 "beforeunload", "localized", "message", "message", "message", "MozAfterPaint", "moztimechange", "open", "show"
 ]
 	
-		
+def etsi_kasiteltavat_tiedostot(hakemistosta, ohitettavat_hakemistot=['vendor'], haettavat_tiedostotyypit=['js', 'css', 'html', 'phtml']): # Listaa hakemiston alikansioineen ja poimii .js, .css ja .phtml -tiedostot skipaten vendor-kansion
+	#ohitettavat_hakemistot = ['vendor']
+	#haettavat_tiedostotyypit = ['js', 'css', 'html', 'phtml']
+	palautus = []
+	listaus = os.listdir(hakemistosta)
+	for t in listaus:
+		t_pointer = hakemistosta + '/' + t
+		if os.path.isdir(t_pointer) and t not in ohitettavat_hakemistot:
+			palautus.extend(etsi_kasiteltavat_tiedostot(t_pointer))
+		elif os.path.isfile(t_pointer) and len(t.split(".")) > 1 and t.split(".")[-1] in haettavat_tiedostotyypit:
+			palautus.append(t_pointer)
+	return palautus		
 		
 # SUORITUS:
 #	-otetaan sotkettava tiedosto komentoriviltä argumenttina. 
@@ -343,8 +359,12 @@ SEURANTAAN = []
 NIMIKEKARTTA = {}
 def suoritus(): 
 
-	tiedostonimi = sys.argv[1] # komentoriviltä
-	tiedostot = sys.argv[1:]
+#	tiedostonimi = sys.argv[1] # komentoriviltä
+	if len(sys.argv) == 1:
+		tiedostot = etsi_kasiteltavat_tiedostot(os.path.abspath('.'))	
+	else:
+		tiedostot = sys.argv[1:]
+	
 	tiedostotJarjestyksessa = []
 	for tiedosto in tiedostot:
 		if onHTML(tiedosto):
@@ -378,12 +398,12 @@ def suoritus():
 				vientitiedosto = open(luoTiedostonimiEtuliitteella(tiedostonimi, ""), 'w+')
 			elif onCSS(tiedostonimi):
 				sisalto = etsi_ja_korvaa_muuttujat_csssta(sisalto)
-				vientitiedosto = open(luoTiedostonimiEtuliitteella(tiedostonimi, "munglattu-"), 'w+')
+				vientitiedosto = open(luoTiedostonimiEtuliitteella(tiedostonimi, ""), 'w+')
 			else: # ei sisällä htmlaa
 				sisalto = poista_kommentit(sisalto)
 				sisalto = etsi_muuttujat(sisalto)
 				#sisalto = korvaa_loydetyt_muuttujat(sisalto)
-				vientitiedosto = open(luoTiedostonimiEtuliitteella(tiedostonimi, "munglattu-"), 'w+')
+				vientitiedosto = open(luoTiedostonimiEtuliitteella(tiedostonimi, ""), 'w+')
 			vientitiedosto.write(sisalto)
 			vientitiedosto.close()
 				
