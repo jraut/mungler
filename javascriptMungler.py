@@ -1,22 +1,20 @@
 # -*- coding: utf-8 -*-
 import re, os, sys
 
-def onHTML(tiedostonimi):
-	return tiedostonimi.split(".")[-1].find("html") is not -1
 
-def onCSS(tiedostonimi):
-	return tiedostonimi.split(".")[-1].find("css") is not -1
+def lue_muunnoskartta(tiedostonimi):
+	global NIMIKEKARTTA
+	if os.path.isfile(tiedostonimi):
+			teksti = open(tiedostonimi, 'r').read()
+	if (teksti):
+		a = re.compile(r"""^(?P<alkuperainen>\w+):\s*(?P<munglattu>\w+)$""", re.M)
+		for match in a.finditer(teksti):
+			NIMIKEKARTTA[match.group(1)] = match.group(2)
 
-def onPHP(tiedostonimi):
-	return tiedostonimi.split(".")[-1].find("php") is not -1
 
+def onTyyppia(tiedostonimi, paate):
+	return tiedostonimi.split(".")[-1].find(paate) is not -1	
 
-def luoTiedostonimiEtuliitteella(tiedostonimi, etuliite):
-	osat = tiedostonimi.split("/")
-	if len(osat) == 1:
-		return etuliite+tiedostonimi
-	else:
-		return tiedostonimi[0:tiedostonimi.find(osat[-1])] + etuliite + osat[-1]
 def poista_kommentit(teksti):
 	return re.sub(r"(?xms)(?P<kommentti>(\/\* .*? \*\/) | (\/\/.*?$))", "", teksti)
 	
@@ -30,7 +28,7 @@ def poista_valimerkit(teksti):
 		if osumat['edeltaja'] in VARATUT:
 			palautus += " "
 		if osumat['vikaKirjain']:
-			plautus += " "
+			palautus += " "
 		return palautus			
 	return a.sub(valimerkinpoisto, teksti)
 
@@ -61,6 +59,15 @@ def etsi_ja_korvaa_muuttujat_htmlsta(teksti):
 	return a.sub(kas, teksti)
 #	return a.sub(kasittely_loydetyille_muuttujille, teksti)
 
+def etsi_ja_korvaa_muuttujat_phpsta(teksti):
+	global NIMIKEKARTTA 
+	a = re.compile(r"""
+			(?P<merkkijononalkumerkki>["'])(?P<merkkijono>([^(?P=merkkijononalkumerkki)]+?))(?P=merkkijononalkumerkki)
+		""", re.X|re.M|re.S)
+	def kas(match):
+		if match.group('merkkijono') in NIMIKEKARTTA:
+			return NIMIKEKARTTA[match.group('merkkijono')]
+	return a.sub(kas, teksti)	
 
 def etsi_ja_korvaa_muuttujat_csssta(teksti):
 	a = re.compile(r"""
@@ -147,12 +154,14 @@ def kasittely_loydetyille_muuttujille(muuttuja):
 		return nimike
 	return NIMIKEKARTTA[muuttuja]
 
+#Turha
 def korvaa_loydetyt_muuttujat(teksti):
 	a = re.compile(r"""
 		(?<!\/)\b(?P<muuttuja>[a-zA-Z]\w*?)\b 															# Loput ilmaisut ovat muuttujia. Eivät ala kuin kirjaimella.
 		""", re.X|re.M|re.S)
 	return a.sub(korvaa_muuttuja, teksti)
 
+#Turha
 def korvaa_muuttuja(muuttuja):
 	global NIMIKEKARTTA;
 	if type(muuttuja) is not str: 
@@ -338,40 +347,96 @@ VARATUT = [
 "beforeunload", "localized", "message", "message", "message", "MozAfterPaint", "moztimechange", "open", "show"
 ]
 	
-def etsi_kasiteltavat_tiedostot(hakemistosta, ohitettavat_hakemistot=['vendor'], haettavat_tiedostotyypit=['js', 'css', 'html', 'phtml']): # Listaa hakemiston alikansioineen ja poimii .js, .css ja .phtml -tiedostot skipaten vendor-kansion
+def etsi_kasiteltavat_tiedostot(hakemistosta, ohitettavat=['vendor'], etsittavat=[], haettavat_tiedostotyypit=['js', 'css', 'html', 'phtml']): # Listaa hakemiston alikansioineen ja poimii .js, .css ja .phtml -tiedostot skipaten vendor-kansion
 	#ohitettavat_hakemistot = ['vendor']
 	#haettavat_tiedostotyypit = ['js', 'css', 'html', 'phtml']
 	palautus = []
 	listaus = os.listdir(hakemistosta)
 	for t in listaus:
-		t_pointer = hakemistosta + '/' + t
-		if os.path.isdir(t_pointer) and t not in ohitettavat_hakemistot:
-			palautus.extend(etsi_kasiteltavat_tiedostot(t_pointer))
-		elif os.path.isfile(t_pointer) and len(t.split(".")) > 1 and t.split(".")[-1] in haettavat_tiedostotyypit:
-			palautus.append(t_pointer)
+		if t not in ohitettavat:
+			t_pointer = hakemistosta + '/' + t
+			if os.path.isdir(t_pointer):
+				palautus.extend(etsi_kasiteltavat_tiedostot(t_pointer, ohitettavat, etsittavat, haettavat_tiedostotyypit))
+			elif os.path.isfile(t_pointer):
+				if len(t.split(".")) > 1 and t.split(".")[-1] in haettavat_tiedostotyypit:
+					palautus.append(t_pointer)
+				elif t in etsittavat:
+					palautus.append(t_pointer)				
 	return palautus		
+
+def tallennaTiedostoUuteenHakemistopuuhun(tiedostonimi, hakemisto="mungled", juurikansio=""):
+	if not juurikansio:
+		juurikansio = os.path.abspath('.')
+	loppuosa = tiedostonimi.split(juurikansio)[-1]
+	polku = juurikansio + "/mungled"
+	for hakemisto in loppuosa.split("/"):
+		if not os.path.exists(polku):
+			os.mkdir(polku, 0775)
+		polku = polku + "/" + hakemisto			
+	return polku
+	
+# Tutkii komentoriviparametreja
+def sisaltaaArgumentin(argumentti):
+	paikka = None
+	for i in sys.argv:
+		if i == argumentti:
+			paikka = sys.argv.index(argumentti)+1
+	return paikka
+
+# Tutkii komentoriviparametreja	
+def seuraavaArgumentti(paikka):
+	seuraavanPaikka = None
+	if paikka:
+		for i in sys.argv[paikka:]:
+			if not seuraavanPaikka and i.find("--") == 0:
+				seuraavanPaikka = sys.argv.index(i)
+	return seuraavanPaikka
+			
+def puraNimikekartta(tiedostonimi):
+	if os.path.isfile(tiedostonimi):
+		rivit = open(tiedostonimi, 'r')
+
 		
 # SUORITUS:
 #	-otetaan sotkettava tiedosto komentoriviltä argumenttina. 
 #	-haetaan sen muuttujien määritellyt nimet. 
 #	-luodaan niille hakemisto, joissa uudet nimet.
-SEURANTAAN = []
 NIMIKEKARTTA = {}
 def suoritus(): 
+	global NIMIKEKARTTA
 
-#	tiedostonimi = sys.argv[1] # komentoriviltä
-	if len(sys.argv) == 1:
-		tiedostot = etsi_kasiteltavat_tiedostot(os.path.abspath('.'))	
-	else:
-		tiedostot = sys.argv[1:]
+	kartta = sisaltaaArgumentin("--map")
+	aikaisempiMuunnoskartta = sys.argv[kartta:seuraavaArgumentti(kartta)] if kartta else []
+	if aikaisempiMuunnoskartta and os.path.isfile(aikaisempiMuunnoskartta[-1]):
+		NIMIKEKARTTA = lue_muunnoskartta(aikaisempiMuunnoskartta[-1])
+
+	ohitettaviaTiedostoja = sisaltaaArgumentin("--skipped")
+	ohitettavatTiedostot = sys.argv[ohitettaviaTiedostoja:seuraavaArgumentti(ohitettaviaTiedostoja)] if ohitettaviaTiedostoja else ['vendor', 'uimodule-varikartat.js']
+
+	kevytKasiteltavia = sisaltaaArgumentin("--soft") # ei etsi uusia muuttujia. Käsittelee vain merkkijonot. Lähinnä php-tiedostoille joissa restful-vuorovaikutus frontin kanssa.
+	kevytKasiteltavat = sys.argv[kevytKasiteltavia:seuraavaArgumentti(kevytKasiteltavia)] if kevytKasiteltavia else []
 	
+	tiedostot = sys.argv[1:seuraavaArgumentti(1)]
+	print tiedostot
+	if len(tiedostot) > 1 or (len(tiedostot) is 1 and os.path.isfile(tiedostot[0])):
+		tiedostot = sys.argv[1:seuraavaArgumentti(1)][1]
+	else:
+		if not tiedostot:
+			polku = os.path.abspath('.')
+		if len(tiedostot) == 1:
+			polku = os.path.abspath('.') + "/"+ tiedostot[0]
+		tiedostot = etsi_kasiteltavat_tiedostot(polku, ohitettavatTiedostot, kevytKasiteltavat)	
+
 	tiedostotJarjestyksessa = []
 	for tiedosto in tiedostot:
-		if onHTML(tiedosto):
+		if onTyyppia(tiedosto, "html"):
 			tiedostotJarjestyksessa.insert(0, tiedosto)
 		else:
 			tiedostotJarjestyksessa.append(tiedosto)
 
+	for t in kevytKasiteltavat: # Tässä oletetaan että kevytkäsiteltävät on phpta
+			tiedostotJarjestyksessa.append(t) # Tässä oletetaan että kevytkäsiteltävät on phpta
+					
 	muuttujat = []
 	
 #	for tiedostonimi in tiedostot:
@@ -383,41 +448,37 @@ def suoritus():
 	#NIMIKEKARTTA.update(muodosta_uusi_nimikekartta(muuttujat))
 
 	for tiedostonimi in tiedostotJarjestyksessa:
-		print tiedostonimi
+		# print tiedostonimi
 		if os.path.isfile(tiedostonimi):
 			tekstitiedosto = open(tiedostonimi, 'r')
-			#varmuuskopio = open("backup-"+tiedostonimi.split("/")[-1], 'w')
+			#varmuuskopio = open("bareakup-"+tiedostonimi.split("/")[-1], 'w')
 			sisalto = tekstitiedosto.read()
 			#varmuuskopio.write(sisalto)
 			
 			tekstitiedosto.close()
 
 #			tekstitiedosto.close()
-			if onHTML(tiedostonimi): #tiedosto sisaltaa htmlaa (ja phpta)
+			if onTyyppia(tiedostonimi, "html"): #tiedosto sisaltaa htmlaa (ja phpta)
 				sisalto = etsi_ja_korvaa_muuttujat_htmlsta(sisalto)
-				vientitiedosto = open(luoTiedostonimiEtuliitteella(tiedostonimi, ""), 'w+')
-			elif onCSS(tiedostonimi):
+			elif onTyyppia(tiedostonimi, "css"):
 				sisalto = etsi_ja_korvaa_muuttujat_csssta(sisalto)
-				vientitiedosto = open(luoTiedostonimiEtuliitteella(tiedostonimi, ""), 'w+')
+			elif onTyyppia(tiedostonimi, "php"): #lue nämä kevytKäsiteltävistä
+				sisalto = etsi_ja_korvaa_muuttujat_phpsta(sisalto)
 			else: # ei sisällä htmlaa
 				sisalto = poista_kommentit(sisalto)
 				sisalto = etsi_muuttujat(sisalto)
 				#sisalto = korvaa_loydetyt_muuttujat(sisalto)
-				vientitiedosto = open(luoTiedostonimiEtuliitteella(tiedostonimi, ""), 'w+')
+			vientitiedosto = open(tallennaTiedostoUuteenHakemistopuuhun(tiedostonimi), 'w+')
 			vientitiedosto.write(sisalto)
 			vientitiedosto.close()
+			
+		#for tiedostonimi in kevytKasiteltavat:
 				
-#etsi_muuttujat(open(sys.argv[1], 'r'))
-#print poista_kommentit("""	events: {		"click": "laajennaVarijyva",    // "click p.rinnakkaisvari": "vaihdaSavyRinnakkaiseen"},sss""")
-
 suoritus()
 
+#print etsi_kasiteltavat_tiedostot(tiedostot[0])
+#os.listdir(os.path.abspath('.') + "/" + tiedostot[0])
 for n, m in NIMIKEKARTTA.iteritems():
 	print n +": "+m
-print len(NIMIKEKARTTA)
-#for nimike in SEURANTAAN:
-#	if nimike in NIMIKEKARTTA:
-#		print nimike + " JOLLE ON SALANIMI " + NIMIKEKARTTA[nimike]
-#	else:
-#		nimike
+
 
