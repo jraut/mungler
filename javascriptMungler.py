@@ -1,17 +1,6 @@
 # -*- coding: utf-8 -*-
 import re, os, sys
 
-
-def lue_muunnoskartta(tiedostonimi):
-	global NIMIKEKARTTA
-	if os.path.isfile(tiedostonimi):
-			teksti = open(tiedostonimi, 'r').read()
-	if (teksti):
-		a = re.compile(r"""^(?P<alkuperainen>\w+):\s*(?P<munglattu>\w+)$""", re.M)
-		for match in a.finditer(teksti):
-			NIMIKEKARTTA[match.group(1)] = match.group(2)
-
-
 def onTyyppia(tiedostonimi, paate):
 	return tiedostonimi.split(".")[-1].find(paate) is not -1	
 
@@ -217,6 +206,15 @@ def muodosta_uusi_nimikekartta(muuttujanimikkeet):
 #		palautus[i] = i
 	return palautus
 
+def lue_muunnoskartta(tiedostonimi):
+	global NIMIKEKARTTA
+	if os.path.isfile(tiedostonimi):
+			teksti = open(tiedostonimi, 'r').read()
+	if (teksti):
+		a = re.compile(r"""^(?P<alkuperainen>\w+):\s*(?P<munglattu>\w+)$""", re.M)
+		for match in a.finditer(teksti):
+			NIMIKEKARTTA[match.group(1)] = match.group(2)
+
 VARATUT = [	
 	#Implementation specific
 	"r", "g", "b", "h", "s", "l", "savyHEX", "koostumus", "oma", "taysi", "paletti", "savyja", "alisavyja",
@@ -347,7 +345,7 @@ VARATUT = [
 "beforeunload", "localized", "message", "message", "message", "MozAfterPaint", "moztimechange", "open", "show"
 ]
 	
-def etsi_kasiteltavat_tiedostot(hakemistosta, ohitettavat=['vendor'], etsittavat=[], haettavat_tiedostotyypit=['js', 'css', 'html', 'phtml']): # Listaa hakemiston alikansioineen ja poimii .js, .css ja .phtml -tiedostot skipaten vendor-kansion
+def etsi_kasiteltavat_tiedostot(hakemistosta, ohitettavat=['vendor'], etsittavat=[], haettavat_tiedostotyypit=['js', 'css', 'html', 'phtml'], rekursio=True): # Listaa hakemiston alikansioineen ja poimii .js, .css ja .phtml -tiedostot skipaten vendor-kansion
 	#ohitettavat_hakemistot = ['vendor']
 	#haettavat_tiedostotyypit = ['js', 'css', 'html', 'phtml']
 	palautus = []
@@ -355,15 +353,15 @@ def etsi_kasiteltavat_tiedostot(hakemistosta, ohitettavat=['vendor'], etsittavat
 	for t in listaus:
 		if t not in ohitettavat:
 			t_pointer = hakemistosta + '/' + t
-			if os.path.isdir(t_pointer):
-				palautus.extend(etsi_kasiteltavat_tiedostot(t_pointer, ohitettavat, etsittavat, haettavat_tiedostotyypit))
+			if os.path.isdir(t_pointer) and rekursio:
+				palautus.extend(etsi_kasiteltavat_tiedostot(t_pointer, ohitettavat, etsittavat, haettavat_tiedostotyypit, rekursio))
 			elif os.path.isfile(t_pointer):
 				if len(t.split(".")) > 1 and t.split(".")[-1] in haettavat_tiedostotyypit:
 					palautus.append(t_pointer)
 				elif t in etsittavat:
 					palautus.append(t_pointer)				
 	return palautus		
-
+	
 def tallennaTiedostoUuteenHakemistopuuhun(tiedostonimi, hakemisto="mungled", juurikansio=""):
 	if not juurikansio:
 		juurikansio = os.path.abspath('.')
@@ -375,15 +373,19 @@ def tallennaTiedostoUuteenHakemistopuuhun(tiedostonimi, hakemisto="mungled", juu
 		polku = polku + "/" + hakemisto			
 	return polku
 	
-# Tutkii komentoriviparametreja
+# Tutkii komentoriviparametreja -- TODO: parser.add_argument
 def sisaltaaArgumentin(argumentti):
+	if type(argumentti) == list:
+		haettavat = argumentti
+	else:
+		haettavat = [argumentti]
 	paikka = None
 	for i in sys.argv:
-		if i == argumentti:
-			paikka = sys.argv.index(argumentti)+1
+		if i in haettavat:
+			paikka = sys.argv.index(sys.argv[i])+1
 	return paikka
 
-# Tutkii komentoriviparametreja	
+# Tutkii komentoriviparametreja	TODO: parser.add_argument
 def seuraavaArgumentti(paikka):
 	seuraavanPaikka = None
 	if paikka:
@@ -391,7 +393,24 @@ def seuraavaArgumentti(paikka):
 			if not seuraavanPaikka and i.find("--") == 0:
 				seuraavanPaikka = sys.argv.index(i)
 	return seuraavanPaikka
-			
+
+def eiKomentoriviparametreja():
+	return len(sys.argv) == 1
+	
+def kayttoohjeet():
+	print "USAGE:python javascriptMungler.py [filenames] [options [arguments]]\n\
+Mungler for js, php, (p)html and css -files. \n\
+\nOptions:\n\
+-R, --recursive\t\tScans for files recursively starting from current path. \n\
+-i, --skipped \t\tList of files to be skipped. \n\
+    \"-i vendor\"\t\tSkips every file and subfolders that are located under a \"vendor\"-dir. \n\
+-r, --reverse \t\tRevert changes. Needs a mapfile which is generated as the default output. \n\
+    \"-r -m mapfile.txt\"\tRolls back changes (not fully implemented yet). \n\
+-m, --map \t\tUse a mapfile from a previous runs output. \n\
+    \"singlepage.html -m mapfileOfBigProject.txt\"\n\
+-s, --soft \t\tDo not search for new variables from given files. \n\
+    \"jsclient.js -s serverpage.php\"Mungles php-file softly for ajax-interoperability.\n"
+	
 def puraNimikekartta(tiedostonimi):
 	if os.path.isfile(tiedostonimi):
 		rivit = open(tiedostonimi, 'r')
@@ -405,19 +424,20 @@ NIMIKEKARTTA = {}
 def suoritus(): 
 	global NIMIKEKARTTA
 
-	kartta = sisaltaaArgumentin("--map")
+	kartta = sisaltaaArgumentin(["--map", "-m"]) # Use predefined mapping as a base-dictionary. Usually from a previous run of the program.
 	aikaisempiMuunnoskartta = sys.argv[kartta:seuraavaArgumentti(kartta)] if kartta else []
 	if aikaisempiMuunnoskartta and os.path.isfile(aikaisempiMuunnoskartta[-1]):
 		NIMIKEKARTTA = lue_muunnoskartta(aikaisempiMuunnoskartta[-1])
 
-	ohitettaviaTiedostoja = sisaltaaArgumentin("--skipped")
+	ohitettaviaTiedostoja = sisaltaaArgumentin(["--skipped", "-i", "--ignore"]) # Files and folders that should be skipped. Does not need full paths.
 	ohitettavatTiedostot = sys.argv[ohitettaviaTiedostoja:seuraavaArgumentti(ohitettaviaTiedostoja)] if ohitettaviaTiedostoja else ['vendor', 'uimodule-varikartat.js']
 
-	kevytKasiteltavia = sisaltaaArgumentin("--soft") # ei etsi uusia muuttujia. Käsittelee vain merkkijonot. Lähinnä php-tiedostoille joissa restful-vuorovaikutus frontin kanssa.
+	rekursiivisesti = sisaltaaArgumentin(["--recursive", "-R"])
+
+	kevytKasiteltavia = sisaltaaArgumentin(["--soft", "-s"]) # ei etsi uusia muuttujia. Käsittelee vain merkkijonot. Lähinnä php-tiedostoille joissa restful-vuorovaikutus frontin kanssa.
 	kevytKasiteltavat = sys.argv[kevytKasiteltavia:seuraavaArgumentti(kevytKasiteltavia)] if kevytKasiteltavia else []
-	
+
 	tiedostot = sys.argv[1:seuraavaArgumentti(1)]
-	print tiedostot
 	if len(tiedostot) > 1 or (len(tiedostot) is 1 and os.path.isfile(tiedostot[0])):
 		tiedostot = sys.argv[1:seuraavaArgumentti(1)][1]
 	else:
@@ -425,8 +445,22 @@ def suoritus():
 			polku = os.path.abspath('.')
 		if len(tiedostot) == 1:
 			polku = os.path.abspath('.') + "/"+ tiedostot[0]
-		tiedostot = etsi_kasiteltavat_tiedostot(polku, ohitettavatTiedostot, kevytKasiteltavat)	
+		tiedostot = etsi_kasiteltavat_tiedostot(polku, ohitettavatTiedostot, kevytKasiteltavat, rekursiivisesti)	
 
+	tiedostotKomentorivilta = sys.argv[1:seuraavaArgumentti(1)]
+	tiedostot = []
+	if len(tiedostotKomentorivilta) > 0:
+		for t in tiedostot:
+			if os.path.isfile(t):
+				tiedostot.push(t)
+			if os.path.isdir(t):
+				if (rekursiivisesti):
+					tiedostot.append(etsi_kasiteltavat_tiedostot(os.path.abspath('.') +"/" +t, ohitettavatTiedostot, kevytKasiteltavat))
+				
+	else:
+		if (rekursiivisesti):
+			tiedostot = etsi_kasiteltavat_tiedostot(os.path.abspath('.'), ohitettavatTiedostot, kevytKasiteltavat)	
+					
 	tiedostotJarjestyksessa = []
 	for tiedosto in tiedostot:
 		if onTyyppia(tiedosto, "html"):
@@ -473,8 +507,11 @@ def suoritus():
 			vientitiedosto.close()
 			
 		#for tiedostonimi in kevytKasiteltavat:
-				
-suoritus()
+
+if (eiKomentoriviparametreja()):
+	kayttoohjeet()
+else:		
+	suoritus()
 
 #print etsi_kasiteltavat_tiedostot(tiedostot[0])
 #os.listdir(os.path.abspath('.') + "/" + tiedostot[0])
