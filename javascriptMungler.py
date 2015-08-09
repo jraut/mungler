@@ -74,6 +74,18 @@ def etsi_ja_korvaa_muuttujat_csssta(teksti):
 			return kasittely_loydetyille_muuttujille(match.group('luokka'))
 	return a.sub(kas, teksti)
 	
+def etsi_ja_korvaa_muuttujat_pehmoisesti(teksti):
+	global NIMIKEKARTTA 
+	a = re.compile(r"""
+			(?P<merkkijononalkumerkki>["'])(?P<merkkijono>.*?)(?P=merkkijononalkumerkki)
+		""", re.X|re.M|re.S)
+	def kas(match):
+		if match.group('merkkijono') in NIMIKEKARTTA:
+			return match.group('merkkijononalkumerkki') + NIMIKEKARTTA[match.group('merkkijono')] + match.group('merkkijononalkumerkki')
+		else:
+			return match.group('merkkijononalkumerkki') + match.group('merkkijono') + match.group('merkkijononalkumerkki')
+	return a.sub(kas, teksti)	
+
 
 def etsi_muuttujat_merkkijonosta(teksti):
 	a = re.compile(r"""
@@ -216,16 +228,14 @@ def lue_muunnoskartta(tiedostonimi):
 			NIMIKEKARTTA[match.group(1)] = match.group(2)
 
 VARATUT = [	
-	#Implementation specific
-	"r", "g", "b", "h", "s", "l", "savyHEX", "koostumus", "oma", "taysi", "paletti", "savyja", "alisavyja",
 	#jQuery effect
-	"effect", "direction", "blind",  "paletti", "savyHEX", 'koostumus', 'taysi', # 'oma', 'savyja', 'alisavyja', 'taysi', 'hex', 'savyHEX', 'rinnakkaisvarit', 'alivarit', 'rinnakkaisuus', 'varijyva', 'varikartta', 'suljeNappiKehys', 'linkki', 'taysiTaytto', 'varinOtsikko', 'settiValitsin', 'settivalitsimet', 'variasetukset', "savyvalitsin", "kyllaisyysvalitsin", "kirkkausvalitsin", "varihex", "varinsaatimet", "varisaatimenPykala", "piilotettu", "vaihda", "eiKaytossa", "linkki",
+	"effect", "direction", "blind",  #"paletti", "savyHEX", 'koostumus', 'taysi', # 'oma', 'savyja', 'alisavyja', 'taysi', 'hex', 'savyHEX', 'rinnakkaisvarit', 'alivarit', 'rinnakkaisuus', 'varijyva', 'varikartta', 'suljeNappiKehys', 'linkki', 'taysiTaytto', 'varinOtsikko', 'settiValitsin', 'settivalitsimet', 'variasetukset', "savyvalitsin", "kyllaisyysvalitsin", "kirkkausvalitsin", "varihex", "varinsaatimet", "varisaatimenPykala", "piilotettu", "vaihda", "eiKaytossa", "linkki",
 	#Randoms: css-property values
-	'cover', 'hover', 'auto', 'inline-block', "scroll", "hidden", "overflow", 'block', 'clientX', 'clientY', "hsl", "rgb", "hsla", "rgba", "ffffff", "000000", "c0c0c0", "af4f4f", "pois", "#",
+	'cover', 'hover', 'auto', 'inline-block', "scroll", "hidden", "overflow", 'block', 'clientX', 'clientY', "hsl", "rgb", "hsla", "rgba", "ffffff", "000000", "c0c0c0", "af4f4f", 
 	#HTML-elements
-	'body', 'html', 'head', 'li', 'ul', 'div', 'p', 'canvas', 'h1', 'h2', 
+	'body', 'html', 'head', 'li', 'ul', 'div', 'p', 'canvas', 'h1', 'h2', 'button', 
 	#common usage
-	"arguments", "null", "NULL", "true", "false", "undefined", "NaN", "Infinity", "toString", "console", "log", "apply", "setTimeout", "clearTimeout", 
+	"arguments", "null", "NULL", "true", "false", "undefined", "NaN", "Infinity", "toString", "console", "log", "apply", "setTimeout", "clearTimeout", "window",
 	#Firebug console
 	"console", "log", "debug", "info", "warn", "exception", "assert", "dir", "dirxml", "trace", "group", "groupCollapsed", "groupEnd", "profile", "profileEnd", "count", "clear", "time", "timeEnd", "timeStamp", "table", "error",
 	#Math
@@ -345,16 +355,18 @@ VARATUT = [
 "beforeunload", "localized", "message", "message", "message", "MozAfterPaint", "moztimechange", "open", "show"
 ]
 	
-def etsi_kasiteltavat_tiedostot(hakemistosta, ohitettavat=['vendor'], etsittavat=[], haettavat_tiedostotyypit=['js', 'css', 'html', 'phtml'], rekursio=True): # Listaa hakemiston alikansioineen ja poimii .js, .css ja .phtml -tiedostot skipaten vendor-kansion
+def etsi_kasiteltavat_tiedostot(hakemistosta, ohitettavat=['vendor'], etsittavat=[], rekursio=True, haettavat_tiedostotyypit=['js', 'css', 'html', 'phtml']): # Listaa hakemiston alikansioineen ja poimii .js, .css ja .phtml -tiedostot skipaten vendor-kansion
 	#ohitettavat_hakemistot = ['vendor']
 	#haettavat_tiedostotyypit = ['js', 'css', 'html', 'phtml']
 	palautus = []
+#	print ohitettavat
 	listaus = os.listdir(hakemistosta)
 	for t in listaus:
 		if t not in ohitettavat:
 			t_pointer = hakemistosta + '/' + t
+#			print t_pointer
 			if os.path.isdir(t_pointer) and rekursio:
-				palautus.extend(etsi_kasiteltavat_tiedostot(t_pointer, ohitettavat, etsittavat, haettavat_tiedostotyypit, rekursio))
+				palautus.extend(etsi_kasiteltavat_tiedostot(t_pointer, ohitettavat, etsittavat, rekursio, haettavat_tiedostotyypit))
 			elif os.path.isfile(t_pointer):
 				if len(t.split(".")) > 1 and t.split(".")[-1] in haettavat_tiedostotyypit:
 					palautus.append(t_pointer)
@@ -382,7 +394,7 @@ def sisaltaaArgumentin(argumentti):
 	paikka = None
 	for i in sys.argv:
 		if i in haettavat:
-			paikka = sys.argv.index(sys.argv[i])+1
+			paikka = sys.argv.index(i)+1
 	return paikka
 
 # Tutkii komentoriviparametreja	TODO: parser.add_argument
@@ -390,7 +402,7 @@ def seuraavaArgumentti(paikka):
 	seuraavanPaikka = None
 	if paikka:
 		for i in sys.argv[paikka:]:
-			if not seuraavanPaikka and i.find("--") == 0:
+			if not seuraavanPaikka and i.find("-") == 0:
 				seuraavanPaikka = sys.argv.index(i)
 	return seuraavanPaikka
 
@@ -406,7 +418,7 @@ Mungler for js, php, (p)html and css -files. \n\
     \"-i vendor\"\t\tSkips every file and subfolders that are located under a \"vendor\"-dir. \n\
 -r, --reverse \t\tRevert changes. Needs a mapfile which is generated as the default output. \n\
     \"-r -m mapfile.txt\"\tRolls back changes (not fully implemented yet). \n\
--m, --map \t\tUse a mapfile from a previous runs output. \n\
+-m, --map \t\tUse a mapfile from a previous run. \n\
     \"singlepage.html -m mapfileOfBigProject.txt\"\n\
 -s, --soft \t\tDo not search for new variables from given files. \n\
     \"jsclient.js -s serverpage.php\"Mungles php-file softly for ajax-interoperability.\n"
@@ -424,43 +436,42 @@ NIMIKEKARTTA = {}
 def suoritus(): 
 	global NIMIKEKARTTA
 
+	# Käytä jatkossa argparse -moduulia.
 	kartta = sisaltaaArgumentin(["--map", "-m"]) # Use predefined mapping as a base-dictionary. Usually from a previous run of the program.
 	aikaisempiMuunnoskartta = sys.argv[kartta:seuraavaArgumentti(kartta)] if kartta else []
 	if aikaisempiMuunnoskartta and os.path.isfile(aikaisempiMuunnoskartta[-1]):
 		NIMIKEKARTTA = lue_muunnoskartta(aikaisempiMuunnoskartta[-1])
 
+	ohitettaviaSanoja = sisaltaaArgumentin(["--reserved"])
 	ohitettaviaTiedostoja = sisaltaaArgumentin(["--skipped", "-i", "--ignore"]) # Files and folders that should be skipped. Does not need full paths.
-	ohitettavatTiedostot = sys.argv[ohitettaviaTiedostoja:seuraavaArgumentti(ohitettaviaTiedostoja)] if ohitettaviaTiedostoja else ['vendor', 'uimodule-varikartat.js']
+	ohitettavatTiedostot = sys.argv[ohitettaviaTiedostoja:seuraavaArgumentti(ohitettaviaTiedostoja)] if ohitettaviaTiedostoja else ['vendor']
 
 	rekursiivisesti = sisaltaaArgumentin(["--recursive", "-R"])
 
 	kevytKasiteltavia = sisaltaaArgumentin(["--soft", "-s"]) # ei etsi uusia muuttujia. Käsittelee vain merkkijonot. Lähinnä php-tiedostoille joissa restful-vuorovaikutus frontin kanssa.
 	kevytKasiteltavat = sys.argv[kevytKasiteltavia:seuraavaArgumentti(kevytKasiteltavia)] if kevytKasiteltavia else []
 
-	tiedostot = sys.argv[1:seuraavaArgumentti(1)]
-	if len(tiedostot) > 1 or (len(tiedostot) is 1 and os.path.isfile(tiedostot[0])):
-		tiedostot = sys.argv[1:seuraavaArgumentti(1)][1]
-	else:
-		if not tiedostot:
-			polku = os.path.abspath('.')
-		if len(tiedostot) == 1:
-			polku = os.path.abspath('.') + "/"+ tiedostot[0]
-		tiedostot = etsi_kasiteltavat_tiedostot(polku, ohitettavatTiedostot, kevytKasiteltavat, rekursiivisesti)	
+	if kevytKasiteltavat:
+		ohitettavatTiedostot.extend(kevytKasiteltavat)
 
 	tiedostotKomentorivilta = sys.argv[1:seuraavaArgumentti(1)]
+	if not tiedostotKomentorivilta:
+			kayttoohjeet()
+			sys.exit()
+
 	tiedostot = []
-	if len(tiedostotKomentorivilta) > 0:
-		for t in tiedostot:
-			if os.path.isfile(t):
-				tiedostot.push(t)
-			if os.path.isdir(t):
-				if (rekursiivisesti):
-					tiedostot.append(etsi_kasiteltavat_tiedostot(os.path.abspath('.') +"/" +t, ohitettavatTiedostot, kevytKasiteltavat))
-				
-	else:
-		if (rekursiivisesti):
-			tiedostot = etsi_kasiteltavat_tiedostot(os.path.abspath('.'), ohitettavatTiedostot, kevytKasiteltavat)	
-					
+	for t in tiedostotKomentorivilta:
+		if os.path.isfile(t):
+			tiedostot.push(os.path.abspath('.') +"/" + t)
+		if os.path.isdir(t):
+			polku = os.path.abspath('.')
+			if (t is not "."):
+				polku +=  "/" +t
+			tiedostot.extend(etsi_kasiteltavat_tiedostot(polku, ohitettavatTiedostot, [], rekursiivisesti))
+
+
+	#tiedostotKomentorivilta = etsi_kasiteltavat_tiedostot(polku, ohitettavatTiedostot, kevytKasiteltavat, rekursiivisesti)	
+
 	tiedostotJarjestyksessa = []
 	for tiedosto in tiedostot:
 		if onTyyppia(tiedosto, "html"):
@@ -468,8 +479,8 @@ def suoritus():
 		else:
 			tiedostotJarjestyksessa.append(tiedosto)
 
-	for t in kevytKasiteltavat: # Tässä oletetaan että kevytkäsiteltävät on phpta
-			tiedostotJarjestyksessa.append(t) # Tässä oletetaan että kevytkäsiteltävät on phpta
+#	for t in kevytKasiteltavat: 
+#			tiedostotJarjestyksessa.append(t) 
 					
 	muuttujat = []
 	
@@ -485,13 +496,8 @@ def suoritus():
 		# print tiedostonimi
 		if os.path.isfile(tiedostonimi):
 			tekstitiedosto = open(tiedostonimi, 'r')
-			#varmuuskopio = open("bareakup-"+tiedostonimi.split("/")[-1], 'w')
 			sisalto = tekstitiedosto.read()
-			#varmuuskopio.write(sisalto)
-			
 			tekstitiedosto.close()
-
-#			tekstitiedosto.close()
 			if onTyyppia(tiedostonimi, "html"): #tiedosto sisaltaa htmlaa (ja phpta)
 				sisalto = etsi_ja_korvaa_muuttujat_htmlsta(sisalto)
 			elif onTyyppia(tiedostonimi, "css"):
@@ -502,11 +508,19 @@ def suoritus():
 				sisalto = poista_kommentit(sisalto)
 				sisalto = etsi_muuttujat(sisalto)
 				#sisalto = korvaa_loydetyt_muuttujat(sisalto)
-			vientitiedosto = open(tallennaTiedostoUuteenHakemistopuuhun(tiedostonimi), 'w+')
-			vientitiedosto.write(sisalto)
-			vientitiedosto.close()
+		vientitiedosto = open(tallennaTiedostoUuteenHakemistopuuhun(tiedostonimi), 'w+')
+		vientitiedosto.write(sisalto)
+		vientitiedosto.close()
 			
-		#for tiedostonimi in kevytKasiteltavat:
+	for t in kevytKasiteltavat: # Tässä oletetaan että kevytkäsiteltävät on phpta
+		if os.path.isfile(t):
+			tekstitiedosto = open(t, 'r')
+			sisalto = tekstitiedosto.read()
+			sisalto = etsi_ja_korvaa_muuttujat_pehmoisesti(sisalto)
+			vientitiedosto = open(tallennaTiedostoUuteenHakemistopuuhun(t), 'w+')
+			vientitiedosto.write(sisalto)
+			vientitiedosto.close()			#tiedostotJarjestyksessa.append(t) # Tässä oletetaan että kevytkäsiteltävät on phpta
+		
 
 if (eiKomentoriviparametreja()):
 	kayttoohjeet()
@@ -515,6 +529,7 @@ else:
 
 #print etsi_kasiteltavat_tiedostot(tiedostot[0])
 #os.listdir(os.path.abspath('.') + "/" + tiedostot[0])
+
 for n, m in NIMIKEKARTTA.iteritems():
 	print n +": "+m
 
