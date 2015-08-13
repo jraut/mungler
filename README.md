@@ -7,10 +7,11 @@ Developement is still in early beta. Do not use in production environment altoug
 
 The output files should appear in a subdirectory named "mungled" in your present working dir. Stdout prints a mapping that has key-value-pairs of original nominators and their new identities.
 
-
-
 ### Usage:
 `python javascriptMungler.py [filenames] [options [arguments]]`
+The following assumptions are made:
+- JS-files do not contain strings that are to be presented to the end-user.
+- Reserved words are listed in the script. Currently covers standard ECMAScript (v6), some common browser-related calls, jQuery, Backbone and Underscore. Defining custom word-maps is not yet possible.
 
 ###Options:
 `-R, --recursive` Scans recursively when given a path. If no files have been given, scans from current path.  
@@ -21,3 +22,6 @@ ie. `singlepage.html -m mapfileOfBigProject.txt` mungles a singlepage.html file 
 `-s, --soft [files]` Do not search for new variables from given files. 
 ie. `jsclient.js -s serverpage.php` Mungles the js-file first. The variables and other names in serverpage.php are not touched, except the ones which appear to be ajax-parameters used in jsclient.js.
 
+
+###History:
+The tool was created for one certain web site. It is now flexible enough to squeeze out working versions of other pages as well. The developement is currently on hold.

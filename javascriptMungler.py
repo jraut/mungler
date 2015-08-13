@@ -235,7 +235,7 @@ VARATUT = [
 	#HTML-elements
 	'body', 'html', 'head', 'li', 'ul', 'div', 'p', 'canvas', 'h1', 'h2', 'button', 
 	#common usage
-	"arguments", "null", "NULL", "true", "false", "undefined", "NaN", "Infinity", "toString", "console", "log", "apply", "setTimeout", "clearTimeout", "window",
+	"arguments", "null", "NULL", "true", "false", "undefined", "NaN", "Infinity", "toString", "console", "log", "apply", "setTimeout", "clearTimeout", "window", "toPrecision",
 	#Firebug console
 	"console", "log", "debug", "info", "warn", "exception", "assert", "dir", "dirxml", "trace", "group", "groupCollapsed", "groupEnd", "profile", "profileEnd", "count", "clear", "time", "timeEnd", "timeStamp", "table", "error",
 	#Math
@@ -411,7 +411,7 @@ def eiKomentoriviparametreja():
 	
 def kayttoohjeet():
 	print "USAGE:python javascriptMungler.py [filenames] [options [arguments]]\n\
-Mungler for js, php, (p)html and css -files. \n\
+Mungler for js, php, (p)html and css -files. Version 0.2 \n\
 \nOptions:\n\
 -R, --recursive\t\tScans for files recursively starting from current path. \n\
 -i, --skipped \t\tList of files to be skipped. \n\
