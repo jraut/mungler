@@ -861,13 +861,18 @@ def suoritus():
 	pwd = os.path.abspath(".")
 	aikaisempiMuunnoskartta = komentoriviParametrit(["--map", "-m"])
 	
-	NIMIKEKARTTA = lue_muunnoskartta(aikaisempiMuunnoskartta[-1]) if (aikaisempiMuunnoskartta and os.path.isfile(aikaisempiMuunnoskartta[-1])) else {}
+	NIMIKEKARTTA = lue_muunnoskartta(aikaisempiMuunnoskartta[-1]) if (
+		aikaisempiMuunnoskartta and 
+		os.path.isfile(aikaisempiMuunnoskartta[-1])) else {}
 	
-	ohitettavatTiedostot = komentoriviParametrit(["--skipped", "-i", "--ignore"])
-	ohitettavatTiedostot = map(lambda t: pwd +"/" + t if (t.find(pwd) < 0 and t.find("/") > -1) else t, ohitettavatTiedostot) 
+	ohitettavatTiedostot = komentoriviParametrit(["--skipped", 
+		"-i", "--ignore"])
+	ohitettavatTiedostot = map(lambda t: pwd +"/" + t if (
+		t.find(pwd) < 0 and t.find("/") > -1) else t, ohitettavatTiedostot) 
 
-	kevytKasiteltavat = komentoriviParametrit(["--soft", "-s"])  # ei etsi uusia muuttujia. Käsittelee vain merkkijonot. Lähinnä php-tiedostoille joissa restful-vuorovaikutus frontin kanssa.
-	kevytKasiteltavat = map(lambda t: pwd +"/" + t if t.find(pwd) < 0 else t, kevytKasiteltavat) 
+	kevytKasiteltavat = komentoriviParametrit(["--soft", "-s"])  
+	kevytKasiteltavat = map(lambda t: pwd +"/" + t if t.find(pwd) < 0 else 
+		t, kevytKasiteltavat) 
 	ohitettavatTiedostot.extend(kevytKasiteltavat)
 
 	rekursiivisesti = sisaltaaArgumentin(["--recursive", "-R"])
@@ -914,7 +919,7 @@ def suoritus():
 		vientitiedosto.write(sisalto)
 		vientitiedosto.close()
 			
-	for t in kevytKasiteltavat: # Tässä oletetaan että kevytkäsiteltävät on phpta
+	for t in kevytKasiteltavat: 
 		if os.path.isfile(t):
 			tekstitiedosto = open(t, 'r')
 			sisalto = tekstitiedosto.read()
@@ -923,7 +928,7 @@ def suoritus():
 				tallennaTiedostoUuteenHakemistopuuhun(t), 'w+')
 			vientitiedosto.write(sisalto)
 
-			vientitiedosto.close()			#tiedostotJarjestyksessa.append(t) # Tässä oletetaan että kevytkäsiteltävät on phpta
+			vientitiedosto.close()			
 		
 
 if (eiKomentoriviparametreja()):
