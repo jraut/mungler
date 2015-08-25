@@ -1,8 +1,9 @@
-# -*- coding: utf-8 -*-
+#kis-*- coding: utf-8 -*-
 import re, os, sys
 
 def onTyyppia(tiedostonimi, paate):
-	return tiedostonimi.split(".")[-1].find(paate) is not -1	
+	return tiedostonimi.endswith(paate)
+	#return tiedostonimi.split(".")[-1].find(paate) > -1	
 
 def poista_konsolirivit(teksti):
 	return re.sub(r"(?xms)(?P<konsolirivi>^.*?console\..*?$)", "", teksti)
@@ -111,7 +112,7 @@ def etsi_muuttujat_merkkijonosta(teksti):
 	return a.sub(kasittely_loydetyille_muuttujille, teksti)
 
 def etsi_muuttujat(teksti, softly = False):
-
+	toimenpide = ei_tallenneta if softly else tallenna_muuttujat 
 	a = re.compile(r"""
 					(?P<merkkijononalkumerkki>["'])(?P<merkkijono>([^(?P=merkkijononalkumerkki)]+?))(?P=merkkijononalkumerkki) |		# Merkkijonot eivät normaalisti sisällä. Laitetaan sivuun ja käydään läpi muuttujien löytämiseksi.
 					\{(?P<objekti>[^}]*? (\{[^}]*?\})*? [^}]+? )\} |																# Ei välttämättä tarpeellinen ...
@@ -120,7 +121,7 @@ def etsi_muuttujat(teksti, softly = False):
 																
 					""", re.X|re.M|re.S)
 
-	return a.sub(tallenna_muuttujat, teksti) #if not softly else a.sub(ei_tallenneta, teksti)
+	return a.sub(toimenpide, teksti) #if not softly else a.sub(ei_tallenneta, teksti)
 
 def tallenna_muuttujat(match):
 	re_osumat = match.groupdict();
@@ -156,7 +157,7 @@ def ei_tallenneta(match):
 
 def kasittely_loydetyille_muuttujille(muuttuja):
 	global NIMIKEKARTTA, VARATUT;
-	if type(muuttuja) is not str: 
+	if type(muuttuja) is not basestring: 
 		muuttuja = muuttuja.group('muuttuja')
 	if muuttuja in VARATUT:
 		return muuttuja
@@ -229,7 +230,7 @@ def lue_muunnoskartta(tiedostonimi):
 	NIMIKKEITA = len(NIMIKEKARTTA)
 	return NIMIKEKARTTA 
 	
-VARATUT = [	
+VARATUT = (	
 	#More missing dom stuff:
 	"DOMActivate", 
 	#jQuery effect
@@ -356,7 +357,7 @@ VARATUT = [
 	"DOMWindowCreated", "DOMWindowClose", "DOMTitleChanged", "MozBeforeResize", "SSWindowClosing", "SSWindowStateReady", "SSWindowStateBusy", "close",
 	#Uncategorized events
 	"beforeunload", "localized", "message", "message", "message", "MozAfterPaint", "moztimechange", "open", "show"
-]
+)
 	
 def etsi_kasiteltavat_tiedostot(hakemistosta, ohitettavat=['vendor'], kevytKasiteltavat=[], rekursio=True, haettavat_tiedostotyypit=['js', 'css', 'html', 'phtml']): # Listaa hakemiston alikansioineen ja poimii .js, .css ja .phtml -tiedostot skipaten vendor-kansion
 	palautus = []
@@ -382,7 +383,7 @@ def tallennaTiedostoUuteenHakemistopuuhun(tiedostonimi, hakemisto="mungled", juu
 	
 # Tutkii komentoriviparametreja -- TODO: argparse.add_argument
 def sisaltaaArgumentin(argumentti):
-	haettavat = argumentti if type(argumentti) == list else [argumentti]
+	haettavat = argumentti if isinstance(argumentti, list) else [argumentti]
 	paikka = None
 	for i in sys.argv:
 		if i in haettavat:
@@ -394,13 +395,13 @@ def seuraavaArgumentti(paikka):
 	seuraavanPaikka = None
 	if paikka:
 		for i in sys.argv[paikka:]:
-			if not seuraavanPaikka and i.find("-") == 0:
+			if not seuraavanPaikka and i.startswith("-"): #i.find("-") == 0:
 				seuraavanPaikka = sys.argv.index(i)
 				break
 	return seuraavanPaikka
 
 def komentoriviParametrit(arvolle):
-	if type(arvolle) == list:
+	if isinstance(arvolle, list):
 		haettavat = arvolle
 	else:
 		haettavat = [arvolle]
