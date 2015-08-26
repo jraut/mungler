@@ -11,7 +11,7 @@ class TextParser:
 	'whitespace': r"\s\s*",
 	'txt':  r"""
 			(?P<string_opening>["'])
-			(?P<identifier>([^(?P=string_opening)]+?))
+			(?P<string>([^(?P=string_opening)]+?))
 			(?P=string_opening)
 			""",
 
@@ -32,17 +32,9 @@ class TextParser:
 		""",
 
 	'identifier': r"""
-			(?<!\/)\b(?P<muuttuja>[a-zA-Z]\w*)\b 				
+			(?<!\/)\b(?P<identifier>[a-zA-Z]\w*)\b 				
 			""",
 
-	'js': r"""
-			(?P<string_opening>["'])
-			(?P<merkkijono>([^(?P=string_opening)]+?))
-			(?P=string_opening) |
-			\{(?P<objekti>[^}]*? (\{[^}]*?\})*? [^}]+? )\} |
-			\((?P<kutsu> ([(][^)]*?[)])*? [^)]+? )\) |
-			(?<!\/)\b(?P<muuttuja>[a-zA-Z](\w)*)\b
-		"""
 	}
 	re_patterns['php'] = re_patterns['txt']
 
@@ -53,16 +45,19 @@ class TextParser:
 
 	
 	def parse(self, filetype, content):
-		if filetype in self.sortment:
-			return self.sortment['filetype'](content)
+		if filetype in self.sortments:
+			def f(match):
+				return self.sortments[filetype](self, match)
+			a = re.compile(self.re_patterns[filetype])
+			return a.sub(f, content)
 		
-	def _remove_console_rows(self, t):
+	def remove_console_rows(self, t):
 		return re.sub(self.re_patterns['console'], "", t)
 
-	def _remove_comments(self, t):
+	def remove_comments(self, t):
 		return re.sub(self.re_patterns['comment'], "", t)
 
-	def _remove_empty_lines(self, t):
+	def remove_empty_lines(self, t):
 		return re.sub(self.re_patterns['empty_line'], "", t)
 
 	def _nom_update(self, t):
@@ -77,15 +72,15 @@ class TextParser:
 	def html(self, match):
 		for g, c in match.groupdict().iteritems():
 			if c:
-				if g = 'className':
+				if g == 'className':
 					return " ".join([
-						self.mungle_identifier(n) for n in c.split(" ")]
+						self.mungle_identifier(n) for n in c.split(" ")])
 				else:
 					return self.mungle_identifier(n)
 
 	def php(self, match):
 		return (match.group('string_opening') +
-			self.mungle_identifier(match.group('identifier')) +
+			self.mungle_identifier(match.group('string')) +
 			match.group('string_opening'))
 
 	def css(self, match):
@@ -96,73 +91,75 @@ class TextParser:
 				return mungle_identifier(c)
 
 	def js(self, match):
-		for g, c in match.groupdict().iteritems():
-			if g == 'string':
-				return (match.group('string_opening') +
-						self.js(c) +
-						(match.group('string_opening')
-			if g == 'brackets':
-				return '{'+ self.js(c) + '}'
-			if g == 'parenthesis':
-				return '('+ self.js(c) + ')'
-			else:
-				self.mungle_identifier(c)
-
-	sortment = {
-		'html': self.html,
-		'phtml': self.html,
-		'php': self.php,
-		'js': self.js,
-		'css': self.js
+		matchdict = match.groupdict()
+		for g, c in matchdict.iteritems():
+			if c:
+				if g == 'string':
+					return (match.group('string_opening') +
+							self.parse('js', c) +
+							match.group('string_opening'))
+				if g == 'brackets':
+					return '{'+ self.parse('js', c) + '}'
+				if g == 'parenthesis':
+					return '('+ self.parse('js', c) + ')'
+				else:
+					print self.mungle_identifier(c)
+	
+	sortments = {
+		'html': html,
+		'phtml': html,
+		'php': php,
+		'js': js,
+		'css': js
 	}	 
 
 class Nominator:
 		def __init__(self, ignore):
 			self.ignore = ignore if ignore else []
 
-	nominations: {}
-	i = 0
-	
-	charmap: tuple([chr(i) for i in range(ord('a'), ord('z')+1)])
+		nominations = {}
+		i = 0
+		
+		charmap = tuple([chr(i) for i in range(ord('a'), ord('z')+1)])
 
-	def int_to_charseq(self, int_target):
-		charseq = ""
-		base_n = len(self.charmap)
-		seq_length = 1
-		# max_num_expressed = seq_length ** base_n 
-		while base_n ** seq_length < int_target:
-			seq_length += 1
-		seq_i = range(0, seq_length)
-		seq_i.reverse()
-		for e in seq_i:
-			max_num_expressed = base_n ** e
-			n = int_target / max_num_expressed
-			int_target %= max_num_expressed
-			charseq += self.charmap[n-1]
-		return charseq
-	
-	def next(self):
-		charseq = self.int_to_charseq(self.i)
-		self.i += 1
-		while charseq in self.ignore:
-			charseq = self.next()
-		return charseq
+		def int_to_charseq(self, int_target):
+			charseq = ""
+			base_n = len(self.charmap)
+			seq_length = 1
+			# max_num_expressed = seq_length ** base_n 
+			while base_n ** seq_length < int_target:
+				seq_length += 1
+			seq_i = range(0, seq_length)
+			seq_i.reverse()
+			for e in seq_i:
+				max_num_expressed = base_n ** e
+				n = int_target / max_num_expressed
+				int_target %= max_num_expressed
+				charseq += self.charmap[n-1]
+			return charseq
+		
+		def next(self):
+			charseq = self.int_to_charseq(self.i)
+			self.i += 1
+			while charseq in self.ignore:
+				charseq = self.next()
+			return charseq
 
-	def add(self, t):
-		self.nominations[t] = self.next()
-		return self.nominations[t]
+		def add(self, t):
+			self.nominations[t] = self.next()
+			return self.nominations[t]
 
 
-	def import_nominations(self, filename):
-		if os.path.isfile(filename):
-				text = open(filename, 'r').read()
-		if (text):
-			a = re.compile(r"""
-				^(\w+):\s*(\w+)$""", re.M)
-			for match in a.finditer(text):
-				self.nominations[match.group(1)] = match.group(2)
-		self.i = len(self.nominations)
-		return self.nominations
+		def import_nominations(self, filename):
+			if os.path.isfile(filename):
+					text = open(filename, 'r').read()
+			if (text):
+				a = re.compile(r"""
+					^(\w+):\s*(\w+)$""", re.M)
+				for match in a.finditer(text):
+					self.nominations[match.group(1)] = match.group(2)
+			self.i = len(self.nominations)
+			return self.nominations
 
 def onTyyppia(tiedostonimi, paate):
 	return tiedostonimi.endswith(paate)
@@ -863,20 +860,25 @@ def suoritus():
 			tiedostot.extend(etsi_kasiteltavat_tiedostot(
 				t, ohitettavatTiedostot, kevytKasiteltavat, rekursiivisesti))
 
-	for tiedostonimi in tiedostot:
-		if os.path.isfile(tiedostonimi):
-			tekstitiedosto = open(tiedostonimi, 'r')
-			sisalto = tekstitiedosto.read()
-			paate = tiedostonimi.split(".")[-1]
-			tekstitiedosto.close()
-			sisalto = parser.parse(paate, sisalto))
-			sisalto = poista_kommentit(sisalto)
-			sisalto = etsi_muuttujat(sisalto)
+	for filename in tiedostot:
+		if os.path.isfile(filename):
+			textfile = open(filename, 'r')
+			content = textfile.read()
+			paate = filename.split(".")[-1]
+			textfile.close()
+			content = parser.parse(paate, content)
+			content = parser.remove_comments(content)
+			content = parser.remove_console_rows(content)
+			content = parser.remove_empty_lines(content)
 			vientitiedosto = open(
-				tallennaTiedostoUuteenHakemistopuuhun(tiedostonimi), 'w+')
-			vientitiedosto.write(sisalto)
+				tallennaTiedostoUuteenHakemistopuuhun(filename), 'w+')
+			vientitiedosto.write("/** Code mungled with JS-mungler (https://github.com/jraut/mungler) **/\n")
+			vientitiedosto.write(content)
 			vientitiedosto.close()
-	
+
+	for n, m in parser.nominator.nominations.iteritems():
+		print n +": "+m
+
 if (eiKomentoriviparametreja()):
 	quit(kayttoohjeet())
 else:		
@@ -885,7 +887,5 @@ else:
 #print etsi_kasiteltavat_tiedostot(tiedostot[0])
 #os.listdir(os.path.abspath('.') + "/" + tiedostot[0])
 
-for n, m in NIMIKEKARTTA.iteritems():
-	print n +": "+m
 
 
