@@ -29,6 +29,7 @@ ie. `jsclient.js -s serverpage.php` Mungles the js-file first. The variables and
 #### 0.3
 - Reformatted codebase structure (classes, maintainability in general)
 - Changed to english
+
 #### 0.2
 - Initial beta release
 
