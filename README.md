@@ -1,7 +1,7 @@
 # mungler
 A tool to mungle up variables, id-fields and most nominators in source code. 
 
-To be utilized with (p)html, css and javascript. Can conserve ajax-functionality in php (or possibly other) files: use `--soft filename1 filename2` option to add files which require this.
+To be utilized with (p)html, css and javascript. Can conserve ajax-functionality in php (or possibly other) files: use `--soft filename1 filename2` option to add files which require this. Tries to find variables that come in from frontend via AJAX (and only those).
 
 Developement is still in early beta. Do not use in production environment altough the end result is already non-destructive. Does not account for scoping yet.
 
@@ -10,7 +10,8 @@ The output files should appear in a subdirectory named "mungled" in your present
 ### Usage:
 `python javascriptMungler.py [filenames] [options [arguments]]`
 The following assumptions are made:
-- JS-files do not contain strings that are to be presented to the end-user.
+- .js-files do not contain strings that are to be presented to the end-user.
+- PHP files have in strings (and only in strings) all the inbound AJAX variables (and other names possibly shared with .js-files and the rest of the frontend).
 - Reserved words are listed in the script. Currently covers standard ECMAScript (v6), some common browser-related calls, jQuery, Backbone and Underscore. Defining custom word-maps is not yet possible.
 
 ###Options:
@@ -24,4 +25,4 @@ ie. `jsclient.js -s serverpage.php` Mungles the js-file first. The variables and
 
 
 ###History:
-The tool was created for one certain web site. It is now flexible enough to squeeze out working versions of other pages as well. The developement is currently on hold.
+The tool was created for one certain web site. It is now flexible enough to squeeze out working versions of other pages as well. 

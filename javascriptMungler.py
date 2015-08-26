@@ -1,225 +1,182 @@
-#kis-*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import re, os, sys
+
+class TextParser:
+	soft = False
+
+	re_patterns = {
+	'console': r"(?s)(?P<console>^.*?console\..*?$)",
+	'comment': r"(?ms)(?P<comment>(\/\*.*?\*\/)|(\/\/.*?$))",
+	'empty_line': r"^\s*?$",
+	'whitespace': r"\s\s*",
+	'txt':  r"""
+			(?P<string_opening>["'])
+			(?P<identifier>([^(?P=string_opening)]+?))
+			(?P=string_opening)
+			""",
+
+	'brackets': r"(?xms)\{(?P<brackets>[^}]*? (\{[^}]*?\})*? [^}]+? )\}",
+	'parenthesis': r"(?xms)\((?P<parenthesis> ([(][^)]*?[)])*? [^)]+? )\)",
+	'identifier': r"(?<!\/)\b(?P<identifier>[a-zA-Z](\w)*)\b",
+
+	'html': r"""
+			(?<=id=")\b(?P<idName>(\w|-)+?)(?=") |			
+			(?<=class=")(?P<className>[^"]*?)(?=") |
+			(?<=%-\s)\b(?P<identifier>\w+?)\b(?=\s%>) // ASP-tagi.
+			""",
+
+	'css': r"""
+			(?P<properties>\{[^}]*?\}) |
+			(?<=\#)(?P<idName>\w+)\b |			
+			(?<=\.)(?P<className>\w+)\b
+		""",
+
+	'identifier': r"""
+			(?<!\/)\b(?P<muuttuja>[a-zA-Z]\w*)\b 				
+			""",
+
+	'js': r"""
+			(?P<string_opening>["'])
+			(?P<merkkijono>([^(?P=string_opening)]+?))
+			(?P=string_opening) |
+			\{(?P<objekti>[^}]*? (\{[^}]*?\})*? [^}]+? )\} |
+			\((?P<kutsu> ([(][^)]*?[)])*? [^)]+? )\) |
+			(?<!\/)\b(?P<muuttuja>[a-zA-Z](\w)*)\b
+		"""
+	}
+	re_patterns['php'] = re_patterns['txt']
+
+	re_patterns['js'] = "|".join([re_patterns['txt'], 
+			re_patterns['brackets'], 
+			re_patterns['parenthesis'], 
+			re_patterns['identifier']])
+
+	
+	def parse(self, filetype, content):
+		if filetype in self.sortment:
+			return self.sortment['filetype'](content)
+		
+	def _remove_console_rows(self, t):
+		return re.sub(self.re_patterns['console'], "", t)
+
+	def _remove_comments(self, t):
+		return re.sub(self.re_patterns['comment'], "", t)
+
+	def _remove_empty_lines(self, t):
+		return re.sub(self.re_patterns['empty_line'], "", t)
+
+	def _nom_update(self, t):
+		return self.nominator.add(t)
+
+	def _nom_find(self, t):
+		return self.nominator.nominations[t]
+
+	def mungle_identifier(self, t):
+		return self._nom_find(t) if self.soft else self._nom_update(t)
+
+	def html(self, match):
+		for g, c in match.groupdict().iteritems():
+			if c:
+				if g = 'className':
+					return " ".join([
+						self.mungle_identifier(n) for n in c.split(" ")]
+				else:
+					return self.mungle_identifier(n)
+
+	def php(self, match):
+		return (match.group('string_opening') +
+			self.mungle_identifier(match.group('identifier')) +
+			match.group('string_opening'))
+
+	def css(self, match):
+		for g, c in match.groupdict().iteritems():
+			if g == "properties":
+				return c
+			else:
+				return mungle_identifier(c)
+
+	def js(self, match):
+		for g, c in match.groupdict().iteritems():
+			if g == 'string':
+				return (match.group('string_opening') +
+						self.js(c) +
+						(match.group('string_opening')
+			if g == 'brackets':
+				return '{'+ self.js(c) + '}'
+			if g == 'parenthesis':
+				return '('+ self.js(c) + ')'
+			else:
+				self.mungle_identifier(c)
+
+	sortment = {
+		'html': self.html,
+		'phtml': self.html,
+		'php': self.php,
+		'js': self.js,
+		'css': self.js
+	}	 
+
+class Nominator:
+		def __init__(self, ignore):
+			self.ignore = ignore if ignore else []
+
+	nominations: {}
+	i = 0
+	
+	charmap: tuple([chr(i) for i in range(ord('a'), ord('z')+1)])
+
+	def int_to_charseq(self, int_target):
+		charseq = ""
+		base_n = len(self.charmap)
+		seq_length = 1
+		# max_num_expressed = seq_length ** base_n 
+		while base_n ** seq_length < int_target:
+			seq_length += 1
+		seq_i = range(0, seq_length)
+		seq_i.reverse()
+		for e in seq_i:
+			max_num_expressed = base_n ** e
+			n = int_target / max_num_expressed
+			int_target %= max_num_expressed
+			charseq += self.charmap[n-1]
+		return charseq
+	
+	def next(self):
+		charseq = self.int_to_charseq(self.i)
+		self.i += 1
+		while charseq in self.ignore:
+			charseq = self.next()
+		return charseq
+
+	def add(self, t):
+		self.nominations[t] = self.next()
+		return self.nominations[t]
+
+
+	def import_nominations(self, filename):
+		if os.path.isfile(filename):
+				text = open(filename, 'r').read()
+		if (text):
+			a = re.compile(r"""
+				^(\w+):\s*(\w+)$""", re.M)
+			for match in a.finditer(text):
+				self.nominations[match.group(1)] = match.group(2)
+		self.i = len(self.nominations)
+		return self.nominations
 
 def onTyyppia(tiedostonimi, paate):
 	return tiedostonimi.endswith(paate)
 	#return tiedostonimi.split(".")[-1].find(paate) > -1	
 
-def poista_konsolirivit(teksti):
-	return re.sub(r"(?xms)(?P<konsolirivi>^.*?console\..*?$)", "", teksti)
-
-def poista_kommentit(teksti):
-	return re.sub(r"(?xms)(?P<kommentti>(\/\*.*?\*\/)|(\/\/.*?$))", "",teksti)
-
-def poista_valimerkit(teksti):
-	a = re.compile(r"""
-					(?P<edeltaja>\S*)\s+(?P<vikaKirjain>.)\s+$
-					""", re.X|re.S)
-	def valimerkinpoisto(match):
-		osumat = match.groupdict()
-		palautus = osumat['edeltaja']
-		if osumat['edeltaja'] in VARATUT:
-			palautus += " "
-		if osumat['vikaKirjain']:
-			palautus += " "
-		return palautus			
-	return a.sub(valimerkinpoisto, teksti)
-
-def etsi_ja_korvaa_muuttujat_htmlsta(teksti):
-	a = re.compile(r"""
-			(?<=id=")\b(?P<id>(\w|-)+?)(?=") |			
-			(?<=class=")(?P<luokka>[^"]*?)(?=") |
-			(?<=%-\s)\b(?P<muuttuja>\w+?)\b(?=\s%>) // ASP-tagi.
-			
-		""", re.X|re.M|re.S)
-	def kas(match):
-		osumat = match.groupdict()
-		if osumat['muuttuja']:
-			return kasittely_loydetyille_muuttujille(osumat['muuttuja'])			
-		if osumat['id']:
-			return kasittely_loydetyille_muuttujille(osumat['id'])
-		if osumat['luokka']:
-			palautus = ""
-			eka = 1
-			for osa in osumat['luokka'].split(' '):
-				if eka == 0:
-					palautus += " "
-				palautus += kasittely_loydetyille_muuttujille(osa)
-				if eka == 1:
-					eka = 0
-			return palautus
-
-	return a.sub(kas, teksti)
-#	return a.sub(kasittely_loydetyille_muuttujille, teksti)
-
-def etsi_ja_korvaa_muuttujat_phpsta(teksti):
-	global NIMIKEKARTTA 
-	a = re.compile(r"""
-			(?P<merkkijononalkumerkki>["'])
-			(?P<merkkijono>([^(?P=merkkijononalkumerkki)]+?))
-			(?P=merkkijononalkumerkki)
-		""", re.X|re.M|re.S)
-	def kas(match):
-		if match.group('merkkijono') in NIMIKEKARTTA:
-			return NIMIKEKARTTA[match.group('merkkijono')]
-	return a.sub(kas, teksti)	
-
-def etsi_ja_korvaa_muuttujat_csssta(teksti):
-	a = re.compile(r"""
-			(?P<lauseke>\{[^}]*?\}) |
-			(?<=\#)(?P<id>\w+)\b |			
-			(?<=\.)(?P<luokka>\w+)\b
-			
-		""", re.X|re.M|re.S)
-	def kas(match):
-		if match.group('lauseke'):
-			return match.group('lauseke')
-		elif match.group('id'):
-			return kasittely_loydetyille_muuttujille(match.group('id'))
-		elif match.group('luokka'):
-			return kasittely_loydetyille_muuttujille(
-					match.group('luokka'))
-	return a.sub(kas, teksti)
-
-def etsi_ja_korvaa_muuttujat_pehmoisesti(teksti):
-	global NIMIKEKARTTA 
-	a = re.compile(r"""
-			(?P<merkkijononalkumerkki>["'])
-			(?P<merkkijono>.*?)
-			(?P=merkkijononalkumerkki)
-		""", re.X|re.M|re.S)
-	def kas(match):
-		if match.group('merkkijono') in NIMIKEKARTTA:
-			return (match.group('merkkijononalkumerkki') + 
-			NIMIKEKARTTA[match.group('merkkijono')] + 
-			match.group('merkkijononalkumerkki'))
-		else:
-			return (match.group('merkkijononalkumerkki') + 
-			match.group('merkkijono') + 
-			match.group('merkkijononalkumerkki'))
-	return a.sub(kas, teksti)	
-
-def etsi_muuttujat_merkkijonosta(teksti):
-	a = re.compile(r"""
-#			\b(\.\w+)\b | 					// className
-#			\b(\#\w+)\b | 					// idName or hex
-#			\brgb[a]?([^)]*? ([(][^)]*?[)])*? [^)]*?)\b | 	// rgb-string
-#			\b.|.#|rgb[a]?([^)]*? ([(][^)]*?[)])*? [^)]*?){0,0}
-			(?<!\/)\b(?P<muuttuja>[a-zA-Z]\w*)\b 				
-		""", re.X|re.M|re.S)
-
-	return a.sub(kasittely_loydetyille_muuttujille, teksti)
-
-def etsi_muuttujat(teksti, softly = False):
-	toimenpide = ei_tallenneta if softly else tallenna_muuttujat 
-	a = re.compile(r"""
-					(?P<merkkijononalkumerkki>["'])
-					(?P<merkkijono>([^(?P=merkkijononalkumerkki)]+?))
-					(?P=merkkijononalkumerkki) |	
-					\{(?P<objekti>[^}]*? (\{[^}]*?\})*? [^}]+? )\} |		
-					\((?P<kutsu> ([(][^)]*?[)])*? [^)]+? )\) |				
-					(?<!\/)\b(?P<muuttuja>[a-zA-Z](\w|-)*)\b 				
-																
-					""", re.X|re.M|re.S)
-
-	return a.sub(toimenpide, teksti)
-
-def tallenna_muuttujat(match):
-	re_osumat = match.groupdict();
-	if re_osumat['merkkijono']:
-		return (re_osumat['merkkijononalkumerkki']+
-		etsi_muuttujat_merkkijonosta(re_osumat['merkkijono'])+
-		re_osumat['merkkijononalkumerkki'])
-	if re_osumat['muuttuja']:
-		return kasittely_loydetyille_muuttujille(match.group('muuttuja'))
-	if re_osumat['objekti']:
-		return '{'+etsi_muuttujat(re_osumat['objekti'])+'}'
-	if re_osumat['kutsu']:
-		return '('+etsi_muuttujat(re_osumat['kutsu'])+')'
-	return "";
-
-def ei_tallenneta(match):
-	
-	re_osumat = match.groupdict();
-	if re_osumat['merkkijono']:
-		muuttuja = re_osumat['merkkijono']
-		return (re_osumat['merkkijononalkumerkki']+
-		(NIMIKEKARTTA[muuttuja] if 
-			(muuttuja in NIMIKEKARTTA) else 
-			muuttuja)+re_osumat['merkkijononalkumerkki'])
-	if re_osumat['muuttuja']:
-		muuttuja = re_osumat['muuttuja']
-		return NIMIKEKARTTA[muuttuja] if (
-			(muuttuja in NIMIKEKARTTA)) else muuttuja
-	if re_osumat['objekti']:
-		return '{'+etsi_muuttujat(re_osumat['objekti'], True)+'}'
-	if re_osumat['kutsu']:
-		return '('+etsi_muuttujat(re_osumat['kutsu'], True)+')'
-	return "";
-	
-def kasittely_loydetyille_muuttujille(muuttuja):
-	global NIMIKEKARTTA, VARATUT;
-	if type(muuttuja) is not str: 
-		muuttuja = muuttuja.group('muuttuja')
-	if muuttuja in VARATUT:
-		return muuttuja
-	if muuttuja not in NIMIKEKARTTA:
-		nimike = "" 
-		while (nimike == "") or (nimike in VARATUT):
-			nimike = seuraava_nimike()
-
-		NIMIKEKARTTA[muuttuja] = nimike	
-		return nimike
-	return NIMIKEKARTTA[muuttuja]
-
-
-# Aakkoset a-z.
-MERKIT = [chr(i) for i in range(ord('a'), ord('z')+1)]	
-
-def lukujarjestelmasta_toiseen(kymmenkantainen_luku, lukujarjestelman_merkit):
-	palautus = ""
-	merkkien_maara = 1
-	lukujarjestelman_kantaisuus = len(lukujarjestelman_merkit)
-	valisumma = lukujarjestelman_kantaisuus
-	while valisumma < kymmenkantainen_luku:
-		merkkien_maara += 1
-		valisumma = (lukujarjestelman_kantaisuus ** merkkien_maara)
-	valisumma = kymmenkantainen_luku
-	eksponentit = range(0, merkkien_maara)
-	eksponentit.reverse();
-	for i in eksponentit:
-		resoluutio = lukujarjestelman_kantaisuus ** i;
-		numeraali = 0
-		while (valisumma > resoluutio):
-			valisumma -= resoluutio 
-			numeraali += 1		
-		palautus += lukujarjestelman_merkit[numeraali]
-	return palautus
-
-NIMIKKEITA = 0
-def seuraava_nimike():
-	global NIMIKKEITA
-	NIMIKKEITA += 1
-	return lukujarjestelmasta_toiseen(NIMIKKEITA, MERKIT)
-
-def lue_muunnoskartta(tiedostonimi):
-	global NIMIKEKARTTA, NIMIKKEITA
-	if os.path.isfile(tiedostonimi):
-			teksti = open(tiedostonimi, 'r').read()
-	if (teksti):
-		a = re.compile(r"""
-			^(?P<alkuperainen>\w+):\s*(?P<munglattu>\w+)$""", re.M)
-		for match in a.finditer(teksti):
-			NIMIKEKARTTA[match.group(1)] = match.group(2)
-	NIMIKKEITA = len(NIMIKEKARTTA)
-	return NIMIKEKARTTA 
-	
 VARATUT = (	
+	#Missing randoms and implementation specifics
+	"view",
 	#More missing dom stuff:
 	"DOMActivate", 
 	#jQuery effect
+"""
 	"effect", "direction", "blind",  
-	""""paletti", "savyHEX", 'koostumus', 'taysi', # 'oma', 'savyja', 
+	"paletti", "savyHEX", 'koostumus', 'taysi', # 'oma', 'savyja', 
 	'alisavyja', 'taysi', 'hex', 'savyHEX', 'rinnakkaisvarit', 'alivarit', 
 	'rinnakkaisuus', 'varijyva', 'varikartta', 'suljeNappiKehys', 'linkki', 
 	'taysiTaytto', 'varinOtsikko', 'settiValitsin', 'settivalitsimet', 
@@ -855,9 +812,13 @@ def kayttoohjeet():
 #	-otetaan sotkettava tiedosto komentoriviltä argumenttina. 
 #	-haetaan sen muuttujien määritellyt nimet. 
 #	-luodaan niille hakemisto, joissa uudet nimet.
-NIMIKEKARTTA = {}
+
+
 def suoritus(): 
-	global NIMIKEKARTTA
+	global VARATUT
+	parser = TextParser();
+	parser.nominator = Nominator(VARATUT)
+
 	pwd = os.path.abspath(".")
 	aikaisempiMuunnoskartta = komentoriviParametrit(["--map", "-m"])
 	
@@ -865,12 +826,16 @@ def suoritus():
 		aikaisempiMuunnoskartta and 
 		os.path.isfile(aikaisempiMuunnoskartta[-1])) else {}
 	
-	ohitettavatTiedostot = komentoriviParametrit(["--skipped", 
-		"-i", "--ignore"])
+	ohitettavatTiedostot = komentoriviParametrit([
+			"--skipped", 
+			"-i", 
+			"--ignore"])
 	ohitettavatTiedostot = map(lambda t: pwd +"/" + t if (
 		t.find(pwd) < 0 and t.find("/") > -1) else t, ohitettavatTiedostot) 
 
-	kevytKasiteltavat = komentoriviParametrit(["--soft", "-s"])  
+	kevytKasiteltavat = komentoriviParametrit([
+			"--soft", 
+			"-s"])
 	kevytKasiteltavat = map(lambda t: pwd +"/" + t if t.find(pwd) < 0 else 
 		t, kevytKasiteltavat) 
 	ohitettavatTiedostot.extend(kevytKasiteltavat)
@@ -902,35 +867,16 @@ def suoritus():
 		if os.path.isfile(tiedostonimi):
 			tekstitiedosto = open(tiedostonimi, 'r')
 			sisalto = tekstitiedosto.read()
+			paate = tiedostonimi.split(".")[-1]
 			tekstitiedosto.close()
-			if onTyyppia(tiedostonimi, "html"): 
-				sisalto = etsi_ja_korvaa_muuttujat_htmlsta(sisalto)
-			elif onTyyppia(tiedostonimi, "css"):
-				sisalto = etsi_ja_korvaa_muuttujat_csssta(sisalto)
-			elif onTyyppia(tiedostonimi, "php"): 
-				sisalto = etsi_ja_korvaa_muuttujat_phpsta(sisalto)
-			else: # ei sisällä htmlaa
-				sisalto = poista_kommentit(sisalto)
-				#sisalto =  poista_konsolirivit(sisalto);
-				sisalto = etsi_muuttujat(sisalto)
-				#sisalto = korvaa_loydetyt_muuttujat(sisalto)
-		vientitiedosto = open(
-			tallennaTiedostoUuteenHakemistopuuhun(tiedostonimi), 'w+')
-		vientitiedosto.write(sisalto)
-		vientitiedosto.close()
-			
-	for t in kevytKasiteltavat: 
-		if os.path.isfile(t):
-			tekstitiedosto = open(t, 'r')
-			sisalto = tekstitiedosto.read()
-			sisalto = etsi_muuttujat(sisalto, True)
+			sisalto = parser.parse(paate, sisalto))
+			sisalto = poista_kommentit(sisalto)
+			sisalto = etsi_muuttujat(sisalto)
 			vientitiedosto = open(
-				tallennaTiedostoUuteenHakemistopuuhun(t), 'w+')
+				tallennaTiedostoUuteenHakemistopuuhun(tiedostonimi), 'w+')
 			vientitiedosto.write(sisalto)
-
-			vientitiedosto.close()			
-		
-
+			vientitiedosto.close()
+	
 if (eiKomentoriviparametreja()):
 	quit(kayttoohjeet())
 else:		
