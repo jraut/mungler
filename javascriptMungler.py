@@ -5,17 +5,18 @@ class TextParser:
 	soft = False
 	def __init__(self, ignore):
 		self.ignore = ignore if ignore else []
-		for f in self.re_patterns: 
+		for f in self.sortments: 
 			self.re_compiled[f] = re.compile(self.re_patterns[f])
+
 	re_compiled = {}
 	re_patterns = {
-	'console': r"(?s)(?P<console>^\s*console\..*?$)",
-	'comment': r"(?ms)(?P<comment>(\/\*.*?\*\/)|(\/\/.*?$))",
+	'console': r"(?xms)(?P<console>^\s*console\..*?$)",
+	'comment': r"(?xms)(?P<comment>(\/\*.*?\*\/)|(\/\/.*?$))",
 	'empty_line': r"^\s*?$",
 	'whitespace': r"\s\s*",
-	'txt':  r"""
+	'txt':  r"""(?xms)
 			(?P<string_opening>["'])
-			(?P<string>([^(?P=string_opening)]+?))
+			(?P<string>.*?)
 			(?P=string_opening)
 			""",
 
@@ -25,14 +26,14 @@ class TextParser:
 	#remove hyphen if substractions are without spaces in your code	
 	'identifier': r"(?<!\/)\b(?P<identifier>[a-zA-Z][\w-]*)\b",
 	
-	'html': r"""
+	'html': r"""(?xms)
 
 			(?<=id=")\b(?P<idName>\w+?)(?=") |			
 			(?<=class=")(?P<className>[^"]*?)(?=") |
 			(?<=%-\s)\b(?P<identifier>\w+?)\b(?=\s%>) // ASP-tagi.
 			""",
 
-	'css': r"""
+	'css': r"""(?xms)
 			(?P<properties>\{[^}]*?\}) |
 			(?<=\#)(?P<idName>\w+)\b |			
 			(?<=\.)(?P<className>\w+)\b
@@ -49,6 +50,7 @@ class TextParser:
 	def parse(self, filetype, content):
 		if filetype in self.sortments:
 			def f(match):
+
 				return self.sortments[filetype](self, match)
 			return self.re_compiled[filetype].sub(f, content)
 		
@@ -68,37 +70,48 @@ class TextParser:
 		if t in self.nominator.nominations:
 			return self.nominator.nominations[t] 
 		else:
-			t
+			return t
 		
 
-	def mungle_identifier(self, t):
+	def mungle_identifier(self, t, soft=None):
+		if not soft:
+			soft = self.soft
 		if t in self.ignore:
 			return t
-		elif self.soft:
+		if soft:
 			return self._nom_find(t)
 		else:
-			 return self._nom_update(t)
+			return self._nom_update(t)
 
 	def html(self, match):
-		for g, c in match.groupdict().iteritems():
+		matchgroups = match.groupdict()
+		for g, c in matchgroups.iteritems():
 			if c:
 				if g == 'className':
 					return " ".join([
 						self.mungle_identifier(n) for n in c.split(" ")])
 				else:
-					return self.mungle_identifier(n)
+					return self.mungle_identifier(c)
 
 	def php(self, match):
-		return (match.group('string_opening') +
-			self.parse(match.group('string')) +
-			match.group('string_opening'))
+		matchdict = match.groupdict()
+		for g, c in matchdict.iteritems():
+			if c is not None:
+				if g in ('string'):
+					return (match.group('string_opening') +
+							self.mungle_identifier(c, True) +
+							match.group('string_opening'))
 
 	def css(self, match):
-		for g, c in match.groupdict().iteritems():
-			if g == "properties":
-				return c
-			else:
-				return mungle_identifier(c)
+		matchdict = match.groupdict()
+		for g, c in matchdict.iteritems():
+			if c is not None:
+				if g == "properties":
+					return c
+				elif g in ('idName', 'tagName'):
+					return self.mungle_identifier(c)
+				else:
+					return c
 
 	def js(self, match):
 		matchdict = match.groupdict()
@@ -117,14 +130,14 @@ class TextParser:
 					return self.mungle_identifier(c)
 				else:
 					# this sould not be reached
-					return self.parse(c)
+					return self.parse('js', c)
 	
 	sortments = {
 		'html': html,
 		'phtml': html,
 		'php': php,
 		'js': js,
-		'css': js
+		'css': css
 	}	 
 
 class Nominator:
@@ -730,7 +743,7 @@ VARATUT = (
 )
 	
 def etsi_kasiteltavat_tiedostot(
-		hakemistosta, ohitettavat=['vendor'], kevytKasiteltavat=[], 
+		hakemistosta, ohitettavat=['vendor'], 
 		rekursio=True, haettavat_tiedostotyypit=['js','css','html','phtml']): 
 	palautus = []
 	listaus = os.listdir(hakemistosta)
@@ -739,7 +752,7 @@ def etsi_kasiteltavat_tiedostot(
 		if t not in ohitettavat and t_pointer not in ohitettavat:
 			if os.path.isdir(t_pointer) and rekursio:
 				palautus.extend( etsi_kasiteltavat_tiedostot(t_pointer, 
-					ohitettavat, kevytKasiteltavat, rekursio, 
+					ohitettavat, rekursio, 
 					haettavat_tiedostotyypit))
 			elif os.path.isfile(t_pointer):
 				if (len(t.split(".")) > 1 and 
@@ -835,12 +848,12 @@ def suoritus():
 			"-s"])
 	kevytKasiteltavat = map(lambda t: pwd +"/" + t if t.find(pwd) < 0 else 
 		t, kevytKasiteltavat) 
+
 	ohitettavatTiedostot.extend(kevytKasiteltavat)
 
 	rekursiivisesti = sisaltaaArgumentin(["--recursive", "-R"])
 	
 	ohitettaviaSanoja = sisaltaaArgumentin(["--reserved"])
-
 
 	tiedostotKomentorivilta = sys.argv[1:seuraavaArgumentti(1)]
 	for i, t in enumerate(tiedostotKomentorivilta):
@@ -855,12 +868,15 @@ def suoritus():
 	tiedostot = []
 	for t in tiedostotKomentorivilta:
 		if os.path.isfile(t):
-			tiedostot.push(t)
+			tiedostot.append(t)
 		if os.path.isdir(t):
 			tiedostot.extend(etsi_kasiteltavat_tiedostot(
-				t, ohitettavatTiedostot, kevytKasiteltavat, rekursiivisesti))
-
-	for filename in tiedostot:
+				t, 
+				ohitettavatTiedostot, 
+				rekursiivisesti,
+				parser.sortments))
+	
+	def parse_file(filename):
 		if os.path.isfile(filename):
 			textfile = open(filename, 'r')
 			content = textfile.read()
@@ -874,9 +890,18 @@ def suoritus():
 			content = parser.remove_empty_lines(content)
 			mungled_textfile = open(
 				tallennaTiedostoUuteenHakemistopuuhun(filename), 'w+')
-			mungled_textfile.write("/** Code mungled with JS-mungler (https://github.com/jraut/mungler) **/\n")
+
+			if paate != 'php':
+				mungled_textfile.write("/** Code mungled with JS-mungler (https://github.com/jraut/mungler) **/\n")
 			mungled_textfile.write(content)
 			mungled_textfile.close()
+
+	for filename in tiedostot:
+		parse_file(filename)
+
+	parser.soft = True
+	for filename in kevytKasiteltavat:
+		parse_file(filename)
 
 	muutetut = open(pwd + "/mungler-map.txt", 'w')
 	pickle.dump(parser.nominator.nominations, muutetut)
