@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
-import re, os, sys
+import re, os, sys, pickle
 
 class TextParser:
 	soft = False
-
+	def __init__(self, ignore):
+		self.ignore = ignore if ignore else []
+		for f in self.re_patterns: 
+			self.re_compiled[f] = re.compile(self.re_patterns[f])
+	re_compiled = {}
 	re_patterns = {
-	'console': r"(?s)(?P<console>^.*?console\..*?$)",
+	'console': r"(?s)(?P<console>^\s*console\..*?$)",
 	'comment': r"(?ms)(?P<comment>(\/\*.*?\*\/)|(\/\/.*?$))",
 	'empty_line': r"^\s*?$",
 	'whitespace': r"\s\s*",
@@ -17,10 +21,13 @@ class TextParser:
 
 	'brackets': r"(?xms)\{(?P<brackets>[^}]*? (\{[^}]*?\})*? [^}]+? )\}",
 	'parenthesis': r"(?xms)\((?P<parenthesis> ([(][^)]*?[)])*? [^)]+? )\)",
-	'identifier': r"(?<!\/)\b(?P<identifier>[a-zA-Z](\w)*)\b",
-
+	
+	#remove hyphen if substractions are without spaces in your code	
+	'identifier': r"(?<!\/)\b(?P<identifier>[a-zA-Z][\w-]*)\b",
+	
 	'html': r"""
-			(?<=id=")\b(?P<idName>(\w|-)+?)(?=") |			
+
+			(?<=id=")\b(?P<idName>\w+?)(?=") |			
 			(?<=class=")(?P<className>[^"]*?)(?=") |
 			(?<=%-\s)\b(?P<identifier>\w+?)\b(?=\s%>) // ASP-tagi.
 			""",
@@ -30,14 +37,9 @@ class TextParser:
 			(?<=\#)(?P<idName>\w+)\b |			
 			(?<=\.)(?P<className>\w+)\b
 		""",
-
-	'identifier': r"""
-			(?<!\/)\b(?P<identifier>[a-zA-Z]\w*)\b 				
-			""",
-
 	}
 	re_patterns['php'] = re_patterns['txt']
-
+	re_patterns['phtml'] = re_patterns['html']
 	re_patterns['js'] = "|".join([re_patterns['txt'], 
 			re_patterns['brackets'], 
 			re_patterns['parenthesis'], 
@@ -48,8 +50,7 @@ class TextParser:
 		if filetype in self.sortments:
 			def f(match):
 				return self.sortments[filetype](self, match)
-			a = re.compile(self.re_patterns[filetype])
-			return a.sub(f, content)
+			return self.re_compiled[filetype].sub(f, content)
 		
 	def remove_console_rows(self, t):
 		return re.sub(self.re_patterns['console'], "", t)
@@ -64,10 +65,19 @@ class TextParser:
 		return self.nominator.add(t)
 
 	def _nom_find(self, t):
-		return self.nominator.nominations[t]
+		if t in self.nominator.nominations:
+			return self.nominator.nominations[t] 
+		else:
+			t
+		
 
 	def mungle_identifier(self, t):
-		return self._nom_find(t) if self.soft else self._nom_update(t)
+		if t in self.ignore:
+			return t
+		elif self.soft:
+			return self._nom_find(t)
+		else:
+			 return self._nom_update(t)
 
 	def html(self, match):
 		for g, c in match.groupdict().iteritems():
@@ -80,7 +90,7 @@ class TextParser:
 
 	def php(self, match):
 		return (match.group('string_opening') +
-			self.mungle_identifier(match.group('string')) +
+			self.parse(match.group('string')) +
 			match.group('string_opening'))
 
 	def css(self, match):
@@ -93,17 +103,21 @@ class TextParser:
 	def js(self, match):
 		matchdict = match.groupdict()
 		for g, c in matchdict.iteritems():
-			if c:
-				if g == 'string':
+			#print g, c, match.groups()
+			if c is not None:
+				if g in ('string_opening', 'string'):
 					return (match.group('string_opening') +
-							self.parse('js', c) +
+							self.parse('js', match.group('string')) +
 							match.group('string_opening'))
-				if g == 'brackets':
+				elif g == 'brackets':
 					return '{'+ self.parse('js', c) + '}'
-				if g == 'parenthesis':
+				elif g == 'parenthesis':
 					return '('+ self.parse('js', c) + ')'
+				elif g == 'identifier':
+					return self.mungle_identifier(c)
 				else:
-					print self.mungle_identifier(c)
+					# this sould not be reached
+					return self.parse(c)
 	
 	sortments = {
 		'html': html,
@@ -114,52 +128,46 @@ class TextParser:
 	}	 
 
 class Nominator:
-		def __init__(self, ignore):
-			self.ignore = ignore if ignore else []
+	nominations = {}
+	i = 0
+	
+	charmap = tuple([chr(i) for i in range(ord('a'), ord('z')+1)])
 
-		nominations = {}
-		i = 0
-		
-		charmap = tuple([chr(i) for i in range(ord('a'), ord('z')+1)])
+	def int_to_charseq(self, int_target):
+		charseq = ""
+		base_n = len(self.charmap)
+		seq_length = 1
+		# max_num_expressed = seq_length ** base_n 
+		while base_n ** seq_length < int_target:
+			seq_length += 1
+		seq_i = range(0, seq_length)
+		seq_i.reverse()
+		for e in seq_i:
+			max_num_expressed = base_n ** e
+			n = int_target / max_num_expressed
+			int_target %= max_num_expressed
+			charseq += self.charmap[n-1]
+		return charseq
+	
+	def next(self):
+		charseq = self.int_to_charseq(self.i)
+		self.i += 1
+		return charseq
 
-		def int_to_charseq(self, int_target):
-			charseq = ""
-			base_n = len(self.charmap)
-			seq_length = 1
-			# max_num_expressed = seq_length ** base_n 
-			while base_n ** seq_length < int_target:
-				seq_length += 1
-			seq_i = range(0, seq_length)
-			seq_i.reverse()
-			for e in seq_i:
-				max_num_expressed = base_n ** e
-				n = int_target / max_num_expressed
-				int_target %= max_num_expressed
-				charseq += self.charmap[n-1]
-			return charseq
-		
-		def next(self):
-			charseq = self.int_to_charseq(self.i)
-			self.i += 1
-			while charseq in self.ignore:
-				charseq = self.next()
-			return charseq
+	def add(self, t):
+		self.nominations[t] = self.next()
+		return self.nominations[t]
 
-		def add(self, t):
-			self.nominations[t] = self.next()
-			return self.nominations[t]
-
-
-		def import_nominations(self, filename):
-			if os.path.isfile(filename):
-					text = open(filename, 'r').read()
-			if (text):
-				a = re.compile(r"""
-					^(\w+):\s*(\w+)$""", re.M)
-				for match in a.finditer(text):
-					self.nominations[match.group(1)] = match.group(2)
-			self.i = len(self.nominations)
-			return self.nominations
+	def import_nominations(self, filename):
+		if os.path.isfile(filename):
+				text = open(filename, 'r').read()
+		if (text):
+			a = re.compile(r"""
+				^(\w+):\s*(\w+)$""", re.M)
+			for match in a.finditer(text):
+				self.nominations[match.group(1)] = match.group(2)
+		self.i = len(self.nominations)
+		return self.nominations
 
 def onTyyppia(tiedostonimi, paate):
 	return tiedostonimi.endswith(paate)
@@ -171,16 +179,7 @@ VARATUT = (
 	#More missing dom stuff:
 	"DOMActivate", 
 	#jQuery effect
-"""
 	"effect", "direction", "blind",  
-	"paletti", "savyHEX", 'koostumus', 'taysi', # 'oma', 'savyja', 
-	'alisavyja', 'taysi', 'hex', 'savyHEX', 'rinnakkaisvarit', 'alivarit', 
-	'rinnakkaisuus', 'varijyva', 'varikartta', 'suljeNappiKehys', 'linkki', 
-	'taysiTaytto', 'varinOtsikko', 'settiValitsin', 'settivalitsimet', 
-	'variasetukset', "savyvalitsin", "kyllaisyysvalitsin", "kirkkausvalitsin", 
-	"varihex", "varinsaatimet", "varisaatimenPykala", "piilotettu", "vaihda", 
-	"eiKaytossa", "linkki",
-	"""
 	#Randoms: css-property values
 	'cover', 'hover', 'auto', 'inline-block', "scroll", "hidden", "overflow", 
 	'block', 'clientX', 'clientY', "hsl", "rgb", "hsla", "rgba", "ffffff", 
@@ -813,15 +812,16 @@ def kayttoohjeet():
 
 def suoritus(): 
 	global VARATUT
-	parser = TextParser();
-	parser.nominator = Nominator(VARATUT)
-
+	parser = TextParser(VARATUT)
+	parser.nominator = Nominator()
 	pwd = os.path.abspath(".")
-	aikaisempiMuunnoskartta = komentoriviParametrit(["--map", "-m"])
 	
-	NIMIKEKARTTA = lue_muunnoskartta(aikaisempiMuunnoskartta[-1]) if (
-		aikaisempiMuunnoskartta and 
-		os.path.isfile(aikaisempiMuunnoskartta[-1])) else {}
+	aikaisempiMuunnoskartta = komentoriviParametrit(["--map", "-m"])
+	if aikaisempiMuunnoskartta:
+		if os.path.isfile(aikaisempiMuunnoskartta):
+			mapfile = open(pwd + "/mungler-map.txt", 'rw')
+			parser.nominator.nominations = pickle.load(mapfile)
+			mapfile.close()
 	
 	ohitettavatTiedostot = komentoriviParametrit([
 			"--skipped", 
@@ -864,18 +864,23 @@ def suoritus():
 		if os.path.isfile(filename):
 			textfile = open(filename, 'r')
 			content = textfile.read()
-			paate = filename.split(".")[-1]
 			textfile.close()
-			content = parser.parse(paate, content)
+
+			paate = filename.split(".")[-1]
+			
 			content = parser.remove_comments(content)
 			content = parser.remove_console_rows(content)
+			content = parser.parse(paate, content)
 			content = parser.remove_empty_lines(content)
-			vientitiedosto = open(
+			mungled_textfile = open(
 				tallennaTiedostoUuteenHakemistopuuhun(filename), 'w+')
-			vientitiedosto.write("/** Code mungled with JS-mungler (https://github.com/jraut/mungler) **/\n")
-			vientitiedosto.write(content)
-			vientitiedosto.close()
+			mungled_textfile.write("/** Code mungled with JS-mungler (https://github.com/jraut/mungler) **/\n")
+			mungled_textfile.write(content)
+			mungled_textfile.close()
 
+	muutetut = open(pwd + "/mungler-map.txt", 'w')
+	pickle.dump(parser.nominator.nominations, muutetut)
+	muutetut.close()
 	for n, m in parser.nominator.nominations.iteritems():
 		print n +": "+m
 
