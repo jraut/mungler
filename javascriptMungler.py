@@ -26,11 +26,11 @@ class TextParser:
 	#remove hyphen if substractions are without spaces in your code	
 	'identifier': r"(?<!\/)\b(?P<identifier>[a-zA-Z][\w-]*)\b",
 	
-	'html': r"""(?xms)
+	'phtml': r"""(?xms)
 
 			(?<=id=")\b(?P<idName>\w+?)(?=") |			
 			(?<=class=")(?P<className>[^"]*?)(?=") |
-			(?<=%-\s)\b(?P<identifier>\w+?)\b(?=\s%>) // ASP-tagi.
+			(?<=%-)\s*(?P<identifier>[^%]+?)\s*(?=%>)
 			""",
 
 	'css': r"""(?xms)
@@ -40,7 +40,7 @@ class TextParser:
 		""",
 	}
 	re_patterns['php'] = re_patterns['txt']
-	re_patterns['phtml'] = re_patterns['html']
+	re_patterns['html'] = re_patterns['phtml']
 	re_patterns['js'] = "|".join([re_patterns['txt'], 
 			re_patterns['brackets'], 
 			re_patterns['parenthesis'], 
@@ -86,10 +86,10 @@ class TextParser:
 		else:
 			return self._nom_update(t)
 
-	def html(self, match):
+	def phtml(self, match):
 		matchgroups = match.groupdict()
 		for g, c in matchgroups.iteritems():
-			if c:
+			if c is not None:
 				if g == 'className':
 					return " ".join([
 						self.mungle_identifier(n) for n in c.split(" ")])
@@ -136,8 +136,8 @@ class TextParser:
 					return self.parse('js', c)
 	
 	sortments = {
-		'html': html,
-		'phtml': html,
+		'phtml': phtml,
+		'html': phtml,
 		'php': php,
 		'js': js,
 		'css': css
@@ -200,11 +200,12 @@ VARATUT = (
 	#More missing dom stuff:
 	"DOMActivate", 
 	#jQuery effect
-	"effect", "direction", "blind",  "none", "clearInterval", 
+	"effect", "direction", "blind", 
 	#Randoms: css-property values
 	'cover', 'hover', 'auto', 'inline-block', "scroll", "hidden", "overflow", 
 	'block', 'clientX', 'clientY', "hsl", "rgb", "hsla", "rgba", "ffffff", 
 	"000000", "c0c0c0", "af4f4f", 'light', 'source-over', "transparent",
+	"none",
 	#HTML-elements
 	'body', 'html', 'head', 'li', 'ul', 'div', 'p', 'canvas', 'h1', 'h2', 
 	'button', 
@@ -212,6 +213,7 @@ VARATUT = (
 	"arguments", "null", "NULL", "true", "false", "undefined", "NaN", 
 	"Infinity", "toString", "console", "log", "apply", "setTimeout", 
 	"clearTimeout", "window", "toPrecision", "setInterval", "setTimeout",
+	"clearInterval", 
 	#Firebug console
 	"console", "log", "debug", "info", "warn", "exception", "assert", "dir", 
 	"dirxml", "trace", "group", "groupCollapsed", "groupEnd", "profile", 
