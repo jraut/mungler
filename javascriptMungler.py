@@ -3,8 +3,8 @@ import re, os, sys, pickle
 
 class TextParser:
 	soft = False
-	def __init__(self, ignore):
-		self.ignore = ignore if ignore else []
+	def __init__(self, ignore = []):
+		self.ignore = ignore
 		for f in self.sortments: 
 			self.re_compiled[f] = re.compile(self.re_patterns[f])
 
@@ -64,7 +64,10 @@ class TextParser:
 		return re.sub(self.re_patterns['empty_line'], "", t)
 
 	def _nom_update(self, t):
-		return self.nominator.add(t)
+		if t in self.nominator.nominations:
+			return self.nominator.nominations[t] 
+		else:
+			return self.nominator.add(t)
 
 	def _nom_find(self, t):
 		if t in self.nominator.nominations:
@@ -74,7 +77,7 @@ class TextParser:
 		
 
 	def mungle_identifier(self, t, soft=None):
-		if not soft:
+		if soft is None:
 			soft = self.soft
 		if t in self.ignore:
 			return t
@@ -108,7 +111,7 @@ class TextParser:
 			if c is not None:
 				if g == "properties":
 					return c
-				elif g in ('idName', 'tagName'):
+				elif g in ('idName', 'className'):
 					return self.mungle_identifier(c)
 				else:
 					return c
@@ -143,6 +146,8 @@ class TextParser:
 class Nominator:
 	nominations = {}
 	i = 0
+	def __init__(self, ignore = []):
+		self.ignore = ignore
 	
 	charmap = tuple([chr(i) for i in range(ord('a'), ord('z')+1)])
 
@@ -168,7 +173,10 @@ class Nominator:
 		return charseq
 
 	def add(self, t):
-		self.nominations[t] = self.next()
+		charseq = self.next()
+		while charseq in self.ignore:
+			charseq = self.next()
+		self.nominations[t] = charseq
 		return self.nominations[t]
 
 	def import_nominations(self, filename):
@@ -192,7 +200,7 @@ VARATUT = (
 	#More missing dom stuff:
 	"DOMActivate", 
 	#jQuery effect
-	"effect", "direction", "blind",  
+	"effect", "direction", "blind",  "none", "clearInterval", 
 	#Randoms: css-property values
 	'cover', 'hover', 'auto', 'inline-block', "scroll", "hidden", "overflow", 
 	'block', 'clientX', 'clientY', "hsl", "rgb", "hsla", "rgba", "ffffff", 
@@ -826,7 +834,7 @@ def kayttoohjeet():
 def suoritus(): 
 	global VARATUT
 	parser = TextParser(VARATUT)
-	parser.nominator = Nominator()
+	parser.nominator = Nominator(VARATUT)
 	pwd = os.path.abspath(".")
 	
 	aikaisempiMuunnoskartta = komentoriviParametrit(["--map", "-m"])
@@ -873,8 +881,7 @@ def suoritus():
 			tiedostot.extend(etsi_kasiteltavat_tiedostot(
 				t, 
 				ohitettavatTiedostot, 
-				rekursiivisesti,
-				parser.sortments))
+				rekursiivisesti))
 	
 	def parse_file(filename):
 		if os.path.isfile(filename):
@@ -891,7 +898,7 @@ def suoritus():
 			mungled_textfile = open(
 				tallennaTiedostoUuteenHakemistopuuhun(filename), 'w+')
 
-			if paate != 'php':
+			if paate not in ('php', 'phtml', 'html'):
 				mungled_textfile.write("/** Code mungled with JS-mungler (https://github.com/jraut/mungler) **/\n")
 			mungled_textfile.write(content)
 			mungled_textfile.close()
