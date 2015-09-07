@@ -5,6 +5,7 @@ class TextParser:
 	soft = False
 	def __init__(self, ignore = []):
 		self.ignore = ignore
+		self.nominations = {}
 		for f in self.sortments: 
 			self.re_compiled[f] = re.compile(self.re_patterns[f])
 
@@ -46,7 +47,6 @@ class TextParser:
 			re_patterns['parenthesis'], 
 			re_patterns['identifier']])
 
-	
 	def parse(self, filetype, content):
 		if filetype in self.sortments:
 			def f(match):
@@ -64,18 +64,24 @@ class TextParser:
 		return re.sub(self.re_patterns['empty_line'], "", t)
 
 	def _nom_update(self, t):
-		if t in self.nominator.nominations:
-			return self.nominator.nominations[t] 
+		if t in self.nominations:
+			return self.nominations[t] 
 		else:
-			return self.nominator.add(t)
+			return self._add(t)
 
 	def _nom_find(self, t):
-		if t in self.nominator.nominations:
-			return self.nominator.nominations[t] 
+		if t in self.nominations:
+			return self.nominations[t] 
 		else:
 			return t
-		
 
+	def _add(self, t):
+		charseq = next(self.nominator)
+		while charseq in self.ignore:
+			charseq = next(self.nominator)
+		self.nominations[t] = charseq
+		return charseq
+		
 	def mungle_identifier(self, t, soft=None):
 		if soft is None:
 			soft = self.soft
@@ -143,19 +149,14 @@ class TextParser:
 		'css': css
 	}	 
 
-class Nominator:
-	nominations = {}
-	i = 0
-	def __init__(self, ignore = []):
-		self.ignore = ignore
-	
+def simple_nominator(number = 0):
 	charmap = tuple([chr(i) for i in range(ord('a'), ord('z')+1)])
-
-	def int_to_charseq(self, int_target):
-		charseq = ""
-		base_n = len(self.charmap)
+	base_n = len(charmap)
+	while True:
+		int_target = number
 		seq_length = 1
-		# max_num_expressed = seq_length ** base_n 
+		charseq = ""
+			# max_num_expressed = seq_length ** base_n 
 		while base_n ** seq_length < int_target:
 			seq_length += 1
 		seq_i = range(0, seq_length)
@@ -163,21 +164,12 @@ class Nominator:
 		for e in seq_i:
 			max_num_expressed = base_n ** e
 			n = int_target / max_num_expressed
-			int_target %= max_num_expressed
-			charseq += self.charmap[n-1]
-		return charseq
-	
-	def next(self):
-		charseq = self.int_to_charseq(self.i)
-		self.i += 1
-		return charseq
+			int_target %= max_num_expressed	
 
-	def add(self, t):
-		charseq = self.next()
-		while charseq in self.ignore:
-			charseq = self.next()
-		self.nominations[t] = charseq
-		return self.nominations[t]
+			charseq += charmap[n-1]
+			
+		yield charseq
+		number += 1
 
 def import_nominations(filename):
 	nominations_map = {}
@@ -304,17 +296,17 @@ def run_mungle():
 
 	# identifiers which should not be mungled
 	global RESERVED_WORDS
-	
+	reserved = []
 	# reserved identifiers from given files
 	for filename in parameters_from_commandline(["--reserved", "-n"]):
-		RESERVED_WORDS += import_reserved(filename)
+		reserved += import_reserved(filename)
 
 	# reserved identifiers from cmdline 
-	RESERVED_WORDS += parameters_from_commandline(["--identifiers", "-w"])
-	RESERVED_WORDS = tuple(RESERVED_WORDS)
+	reserved += parameters_from_commandline(["--identifiers", "-w"])
+	reserved = tuple(reserved)
 
-	parser = TextParser(RESERVED_WORDS)
-	parser.nominator = Nominator(RESERVED_WORDS)
+	parser = TextParser(reserved)
+	parser.nominator = simple_nominator(0)
 	
 	skipped_files = parameters_from_commandline([
 			"--skipped",
@@ -324,7 +316,6 @@ def run_mungle():
 	# These ought to get sorted out. I just tried to be fancy.
 	skipped_files = map(lambda t: pwd +"/" + t if (
 		t.find(pwd) < 0 and t.find("/") > -1) else t, skipped_files) 
-
 
 	soft_treated_files = parameters_from_commandline([
 			"--soft", 
@@ -375,9 +366,8 @@ def run_mungle():
 	for filename in soft_treated_files:
 		parse_file(filename)
 
-	for n, m in parser.nominator.nominations.iteritems():
+	for n, m in parser.nominations.iteritems():
 		print n +": "+m
-
 
 if (len(sys.argv) == 1):
 	quit(print_help())
