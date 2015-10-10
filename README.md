@@ -3,7 +3,7 @@ A tool to mungle up variables, strings, names and identifiers in web-targeted so
 
 To be utilized with (p)html, css and javascript. Can conserve ajax-functionality in php (or possibly other) files: use `--soft filename1 filename2` option to add files which require this. Tries to find variables that come in from frontend via AJAX (and only those). Strings in tese get mungled if an equal identifier has been found previously.
 
-Developement is in beta. Do not use in production environment altough the end result is non-destructive. 
+Developement is in beta phase. Do not use in production environment altough the end result is non-destructive. 
 
 The output files should appear in a subdirectory named "mungled" in your present working dir. Prints key-value-pairs to tdout which contains original identifiers and their new nominators.
 
@@ -18,15 +18,16 @@ The following assumptions are made:
 
 ### Options:
 `-n, --reserved [files]`Reads a list of reserved words from a file
+
 `-i, --skipped [files]` List of files to be skipped. Defaults currently to *vendor* , which is meant to leave included third party code untouched (ie. source/js/vendor/, backend/vendor/). Can be full pathnames or names of single directories. Uses absolute pathnames when given. If a single filename is given, it is ignored in every encounter.
 
 `-m, --map [mapfile]` Use a mapfile of identifiers from a previous run. Good for gradually adding / updating single files to a larger project.
 
-ie. `singlepage.html -m mapfileOfBigProject.txt` mungles a singlepage.html file in accordance to a bigger project which has been mungled earlier. Uses the same identifier-names as in the previous project.  **Not fully implemented**
+> ie. `singlepage.html -m mapfileOfBigProject.txt` mungles a singlepage.html file in accordance to a bigger project which has been mungled earlier. Uses the same identifier-names as in the previous project.  **Not fully implemented**
 
 `-s, --soft [files]` Do not search for new identifiers from given files. Instead, searches only from strings, and only for instances found earlier and mungles those and only those. This is for backend files to find identifiers in ajax-requests.
 
-ie. `jsclient.js -s serverpage.php` Mungles the js-file first. The identifiers in serverpage.php are not touched, except the ones which appear in strings and have been found in jsclient.js.
+> ie. `jsclient.js -s serverpage.php` Mungles the js-file first. The identifiers in serverpage.php are not touched, except the ones which appear in strings and have been found in jsclient.js.
 
 `-R, --recursive` Scans paths recursively. 
 
